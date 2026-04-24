@@ -8,7 +8,7 @@
 #define NUM_THREADS 4
 
 int main(){
-    // Variables para medir el tiempo
+    // Variables tiempo
     double tiempo_inicio, tiempo_final;
     
     omp_set_num_threads(NUM_THREADS);
@@ -38,7 +38,7 @@ int main(){
 
     printf("Iniciando procesamiento secuencial de 4 imagenes...\n");
 
-    // --- CAPTURAMOS EL TIEMPO DE INICIO ---
+    
     tiempo_inicio = omp_get_wtime();
 
     for (int i = 0; i < 4; i++) {
@@ -80,7 +80,7 @@ int main(){
         printf("Transformaciones de la imagen %d completadas.\n", i + 1);
     }
 
-    // --- CAPTURAMOS EL TIEMPO FINAL ---
+    
     tiempo_final = omp_get_wtime();
 
     printf("\n=============================================\n");
