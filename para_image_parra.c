@@ -5,7 +5,7 @@
 #include "selec_proc.h"
 #include "selec_proc_1.h"
 
-#define NUM_THREADS 4
+#define NUM_THREADS 18
 
 int main(){
     // Variables tiempo
@@ -22,65 +22,93 @@ int main(){
         fclose(fptr);
     }
 
-    const char *imagenes_entrada[4] = {
-        "./img/prueba1.bmp",
-        "./img/prueba2.bmp",
-        "./img/prueba3.bmp",
-        "./img/prueba4.bmp"
-    };
+    printf("Iniciando procesamiento paralelo de 4 imagenes...\n");
 
-    const char *prefijos[4] = {
-        "img1",
-        "img2",
-        "img3",
-        "img4"
-    };
-
-    printf("Iniciando procesamiento secuencial de 4 imagenes...\n");
-
-    
     tiempo_inicio = omp_get_wtime();
 
-    for (int i = 0; i < 4; i++) {
-        printf("\n--- Procesando imagen %d: %s ---\n", i + 1, imagenes_entrada[i]);
 
-        char out_inv[50], out_espejo[50], out_inv_color[50];
-        char out_espejo_color[50], out_desenfoque[50], out_desenfoque_color[50];
-
-        sprintf(out_inv, "%s_inv_1", prefijos[i]);
-        sprintf(out_espejo, "%s_espejo", prefijos[i]);
-        sprintf(out_inv_color, "%s_inv_color_1", prefijos[i]);
-        sprintf(out_espejo_color, "%s_espejo_color", prefijos[i]);
-        sprintf(out_desenfoque, "%s_desenfoque", prefijos[i]);
-        sprintf(out_desenfoque_color, "%s_desenfoque_color", prefijos[i]);
-
-        #pragma omp parallel
+    #pragma omp parallel
+    {
+        #pragma omp sections
         {
-            #pragma omp sections
-            {
-                #pragma omp section
-                inv_img(out_inv, imagenes_entrada[i]); 
-                
-                #pragma omp section
-                inv_img_grey_horizontal(out_espejo, imagenes_entrada[i]); 
-                
-                #pragma omp section
-                inv_img_color(out_inv_color, imagenes_entrada[i]); 
+            // ================= IMAGEN 1 =================
+            #pragma omp section
+            inv_img("img1_inv_1", "./img/prueba1.bmp"); 
+            
+            #pragma omp section
+            inv_img_grey_horizontal("img1_espejo", "./img/prueba1.bmp"); 
+            
+            #pragma omp section
+            inv_img_color("img1_inv_color_1", "./img/prueba1.bmp"); 
 
-                #pragma omp section
-                inv_img_color_horizontal(out_espejo_color, imagenes_entrada[i]); 
-                
-                #pragma omp section
-                desenfoque(imagenes_entrada[i], out_desenfoque, 27); 
+            #pragma omp section
+            inv_img_color_horizontal("img1_espejo_color", "./img/prueba1.bmp"); 
+            
+            #pragma omp section
+            desenfoque("./img/prueba1.bmp", "img1_desenfoque", 27); 
 
-                #pragma omp section
-                desenfoque_color(imagenes_entrada[i], out_desenfoque_color, 27);
-            }
+            #pragma omp section
+            desenfoque_color("./img/prueba1.bmp", "img1_desenfoque_color", 27);
+
+            // ================= IMAGEN 2 =================
+            #pragma omp section
+            inv_img("img2_inv_1", "./img/prueba2.bmp"); 
+            
+            #pragma omp section
+            inv_img_grey_horizontal("img2_espejo", "./img/prueba2.bmp"); 
+            
+            #pragma omp section
+            inv_img_color("img2_inv_color_1", "./img/prueba2.bmp"); 
+
+            #pragma omp section
+            inv_img_color_horizontal("img2_espejo_color", "./img/prueba2.bmp"); 
+            
+            #pragma omp section
+            desenfoque("./img/prueba2.bmp", "img2_desenfoque", 27); 
+
+            #pragma omp section
+            desenfoque_color("./img/prueba2.bmp", "img2_desenfoque_color", 27);
+
+            // ================= IMAGEN 3 =================
+            #pragma omp section
+            inv_img("img3_inv_1", "./img/prueba3.bmp"); 
+            
+            #pragma omp section
+            inv_img_grey_horizontal("img3_espejo", "./img/prueba3.bmp"); 
+            
+            #pragma omp section
+            inv_img_color("img3_inv_color_1", "./img/prueba3.bmp"); 
+
+            #pragma omp section
+            inv_img_color_horizontal("img3_espejo_color", "./img/prueba3.bmp"); 
+            
+            #pragma omp section
+            desenfoque("./img/prueba3.bmp", "img3_desenfoque", 27); 
+
+            #pragma omp section
+            desenfoque_color("./img/prueba3.bmp", "img3_desenfoque_color", 27);
+
+            // ================= IMAGEN 4 =================
+            #pragma omp section
+            inv_img("img4_inv_1", "./img/prueba4.bmp"); 
+            
+            #pragma omp section
+            inv_img_grey_horizontal("img4_espejo", "./img/prueba4.bmp"); 
+            
+            #pragma omp section
+            inv_img_color("img4_inv_color_1", "./img/prueba4.bmp"); 
+
+            #pragma omp section
+            inv_img_color_horizontal("img4_espejo_color", "./img/prueba4.bmp"); 
+            
+            #pragma omp section
+            desenfoque("./img/prueba4.bmp", "img4_desenfoque", 27); 
+
+            #pragma omp section
+            desenfoque_color("./img/prueba4.bmp", "img4_desenfoque_color", 27);
         }
-        printf("Transformaciones de la imagen %d completadas.\n", i + 1);
     }
 
-    
     tiempo_final = omp_get_wtime();
 
     printf("\n=============================================\n");
