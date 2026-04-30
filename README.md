@@ -119,3 +119,27 @@ Los resultados indican que Linux Bodhi (Laptop B) presenta una ventaja considera
 2.  **Nodo Secundario de Alto Rendimiento:** La **Laptop `C` (Yahel)** funcionará de manera óptima como un nodo secundario de primer nivel. Con la configuración a 18 hilos, procesa cargas a una velocidad similar a la del nodo maestro, aportando una alta capacidad de cómputo a la red.
 3.  **Nodo Secundario de Apoyo:** La **Laptop `A` (Alejandro)** aporta un procesamiento estable. Debido a sus especificaciones físicas, es recomendable asignarle lotes de imágenes proporcionales a su capacidad para evitar retrasos en el tiempo total de la ejecución distribuida.
 4.  **Configuración del Código:** Para el despliegue de la solución, la directiva de hilos debe configurarse en valores altos (18 o 24) en todos los equipos involucrados, ya que maximizar la concurrencia permite reducir los tiempos de espera generados por las operaciones de disco.
+
+---
+
+## 8. GUI build and execution
+
+The graphical interface is implemented in `interfaz_grafica.c` and is designed to be built per platform with the same source file:
+
+### Windows
+
+```bash
+gcc "interfaz_grafica.c" -o "interfaz_grafica.exe" -fopenmp -lgdi32 -lcomdlg32 -lshell32 -mwindows
+```
+
+### Linux and macOS
+
+```bash
+gcc "interfaz_grafica.c" -o "interfaz_grafica" `pkg-config --cflags --libs gtk+-3.0` -fopenmp
+```
+
+Notes:
+
+* The application saves all generated BMP files inside the `img` folder located next to the executable.
+* The interface shows the resolved output directory on screen.
+* The interface also displays the total execution time after the selected transformations finish.
