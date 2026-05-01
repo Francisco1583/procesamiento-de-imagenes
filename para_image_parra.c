@@ -6,115 +6,157 @@
 #include "selec_proc_1.h"
 
 #define NUM_THREADS 18
+#define MAX_IMGS 10
 
-int main(){
-    // Variables tiempo
-    double tiempo_inicio, tiempo_final;
-    
-    omp_set_num_threads(NUM_THREADS);
-    
-    FILE *fptr;
-    char data[80] = "arc1.txt";
-    fptr = fopen(data, "w");
+// Función auxiliar para leer la imagen en RAM una sola vez con validaciones
+void cargar_imagen(const char* path, unsigned char** header, int* offset, unsigned char** pixels, int* ancho, int* alto) {
+    FILE *in = fopen(path, "rb");
+    if (!in) {
+        printf("ERROR_LECTURA\n");
+        exit(1);
+    }
+
+    unsigned char fileHeader[14];
+    if (fread(fileHeader, 1, 14, in) != 14) exit(1);
+    *offset = *(int*)&fileHeader[10];
+
+    *header = (unsigned char*)malloc(*offset);
+    memcpy(*header, fileHeader, 14);
+    if (fread(*header + 14, 1, *offset - 14, in) != (size_t)(*offset - 14)) exit(1);
+
+    *ancho = *(int*)&((*header)[18]);
+    *alto = *(int*)&((*header)[22]);
+
+    int row_padded = ((*ancho) * 3 + 3) & (~3);
+    int pixel_data_size = row_padded * (*alto);
+
+    *pixels = (unsigned char*)malloc(pixel_data_size);
+    if (fread(*pixels, 1, pixel_data_size, in) != (size_t)pixel_data_size) exit(1);
+
+    fclose(in);
+}
+
+// Estructura esperada de argumentos CLI enviados por la interfaz gráfica:
+// ./main [ruta_salida] [kernel_gris] [kernel_color] [f1] [f2] [f3] [f4] [f5] [f6] [img1] [img2] ... [img10]
+int main(int argc, char *argv[]) {
+    // Archivo de registro silencioso
+    FILE *fptr = fopen("arc1.txt", "w");
     if (fptr != NULL){
         fprintf(fptr, "Ejemplo escribir\n");
         fprintf(fptr, "Emmanuel Torres Rios\n");
         fclose(fptr);
     }
 
-    printf("Iniciando procesamiento paralelo de 4 imagenes...\n");
+    // Validación mínima de argumentos (1 ejecutable + 1 ruta + 2 kernels + 6 flags + mínimo 1 imagen = 11)
+    if (argc < 11) {
+        printf("ERROR_ARGUMENTOS\n");
+        return 1;
+    }
 
-    tiempo_inicio = omp_get_wtime();
+    // Parseo de los argumentos de configuración
+    char *ruta_salida = argv[1];
+    int k_gris        = atoi(argv[2]);
+    int k_color       = atoi(argv[3]);
+    
+    // Banderas booleanas (1 = ejecutar, 0 = omitir)
+    int f1 = atoi(argv[4]); // 1- Vertical escala de grises
+    int f2 = atoi(argv[5]); // 2- Vertical escala a colores
+    int f3 = atoi(argv[6]); // 3- Horizontal escala de grises
+    int f4 = atoi(argv[7]); // 4- Horizontal escala a colores
+    int f5 = atoi(argv[8]); // 5- Desenfoque escala de grises
+    int f6 = atoi(argv[9]); // 6- Desenfoque escala a colores
 
+    // Parseo dinámico de imágenes
+    int num_imgs = argc - 10;
+    if (num_imgs > MAX_IMGS) num_imgs = MAX_IMGS; // Tope de seguridad
 
+    // Arreglos para almacenar los datos de hasta 10 imágenes en RAM
+    unsigned char *headers[MAX_IMGS];
+    unsigned char *pixels[MAX_IMGS];
+    int offsets[MAX_IMGS], anchos[MAX_IMGS], altos[MAX_IMGS];
+
+    // Cargar todas las imágenes en RAM secuencialmente
+    for (int i = 0; i < num_imgs; i++) {
+        cargar_imagen(argv[10 + i], &headers[i], &offsets[i], &pixels[i], &anchos[i], &altos[i]);
+    }
+
+    omp_set_num_threads(NUM_THREADS);
+    double tiempo_inicio = omp_get_wtime();
+
+    // Procesamiento paralelo con validación de banderas
     #pragma omp parallel
     {
-        #pragma omp sections
+        #pragma omp single
         {
-            // ================= IMAGEN 1 =================
-            #pragma omp section
-            inv_img("img1_inv_1", "./img/prueba1.bmp"); 
-            
-            #pragma omp section
-            inv_img_grey_horizontal("img1_espejo", "./img/prueba1.bmp"); 
-            
-            #pragma omp section
-            inv_img_color("img1_inv_color_1", "./img/prueba1.bmp"); 
+            for (int i = 0; i < num_imgs; i++) {
+                
+                if (f1) {
+                    #pragma omp task firstprivate(i)
+                    {
+                        char out_path[256];
+                        snprintf(out_path, sizeof(out_path), "%s/img_%d_1_vert_gris.bmp", ruta_salida, i + 1);
+                        gray_img(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
+                    }
+                }
 
-            #pragma omp section
-            inv_img_color_horizontal("img1_espejo_color", "./img/prueba1.bmp"); 
-            
-            #pragma omp section
-            desenfoque("./img/prueba1.bmp", "img1_desenfoque", 27); 
+                if (f2) {
+                    #pragma omp task firstprivate(i)
+                    {
+                        char out_path[256];
+                        snprintf(out_path, sizeof(out_path), "%s/img_%d_2_vert_color.bmp", ruta_salida, i + 1);
+                        inv_img_color(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
+                    }
+                }
 
-            #pragma omp section
-            desenfoque_color("./img/prueba1.bmp", "img1_desenfoque_color", 27);
+                if (f3) {
+                    #pragma omp task firstprivate(i)
+                    {
+                        char out_path[256];
+                        snprintf(out_path, sizeof(out_path), "%s/img_%d_3_horiz_gris.bmp", ruta_salida, i + 1);
+                        inv_img_grey_horizontal(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
+                    }
+                }
 
-            // ================= IMAGEN 2 =================
-            #pragma omp section
-            inv_img("img2_inv_1", "./img/prueba2.bmp"); 
-            
-            #pragma omp section
-            inv_img_grey_horizontal("img2_espejo", "./img/prueba2.bmp"); 
-            
-            #pragma omp section
-            inv_img_color("img2_inv_color_1", "./img/prueba2.bmp"); 
+                if (f4) {
+                    #pragma omp task firstprivate(i)
+                    {
+                        char out_path[256];
+                        snprintf(out_path, sizeof(out_path), "%s/img_%d_4_horiz_color.bmp", ruta_salida, i + 1);
+                        inv_img_color_horizontal(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
+                    }
+                }
 
-            #pragma omp section
-            inv_img_color_horizontal("img2_espejo_color", "./img/prueba2.bmp"); 
-            
-            #pragma omp section
-            desenfoque("./img/prueba2.bmp", "img2_desenfoque", 27); 
+                if (f5) {
+                    #pragma omp task firstprivate(i)
+                    {
+                        char out_path[256];
+                        snprintf(out_path, sizeof(out_path), "%s/img_%d_5_blur_gris.bmp", ruta_salida, i + 1);
+                        desenfoque(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i], k_gris);
+                    }
+                }
 
-            #pragma omp section
-            desenfoque_color("./img/prueba2.bmp", "img2_desenfoque_color", 27);
-
-            // ================= IMAGEN 3 =================
-            #pragma omp section
-            inv_img("img3_inv_1", "./img/prueba3.bmp"); 
-            
-            #pragma omp section
-            inv_img_grey_horizontal("img3_espejo", "./img/prueba3.bmp"); 
-            
-            #pragma omp section
-            inv_img_color("img3_inv_color_1", "./img/prueba3.bmp"); 
-
-            #pragma omp section
-            inv_img_color_horizontal("img3_espejo_color", "./img/prueba3.bmp"); 
-            
-            #pragma omp section
-            desenfoque("./img/prueba3.bmp", "img3_desenfoque", 27); 
-
-            #pragma omp section
-            desenfoque_color("./img/prueba3.bmp", "img3_desenfoque_color", 27);
-
-            // ================= IMAGEN 4 =================
-            #pragma omp section
-            inv_img("img4_inv_1", "./img/prueba4.bmp"); 
-            
-            #pragma omp section
-            inv_img_grey_horizontal("img4_espejo", "./img/prueba4.bmp"); 
-            
-            #pragma omp section
-            inv_img_color("img4_inv_color_1", "./img/prueba4.bmp"); 
-
-            #pragma omp section
-            inv_img_color_horizontal("img4_espejo_color", "./img/prueba4.bmp"); 
-            
-            #pragma omp section
-            desenfoque("./img/prueba4.bmp", "img4_desenfoque", 27); 
-
-            #pragma omp section
-            desenfoque_color("./img/prueba4.bmp", "img4_desenfoque_color", 27);
+                if (f6) {
+                    #pragma omp task firstprivate(i)
+                    {
+                        char out_path[256];
+                        snprintf(out_path, sizeof(out_path), "%s/img_%d_6_blur_color.bmp", ruta_salida, i + 1);
+                        desenfoque_color(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i], k_color);
+                    }
+                }
+            }
         }
     }
 
-    tiempo_final = omp_get_wtime();
+    double tiempo_final = omp_get_wtime();
 
-    printf("\n=============================================\n");
-    printf("Procesamiento total finalizado.\n");
-    printf("Tiempo total de ejecucion: %.4f segundos\n", tiempo_final - tiempo_inicio);
-    printf("=============================================\n");
+    // Liberar memoria
+    for (int i = 0; i < num_imgs; i++) {
+        free(headers[i]);
+        free(pixels[i]);
+    }
+
+    // Única salida de texto que leerá la interfaz gráfica
+    printf("TIEMPO_TOTAL:%.4f\n", tiempo_final - tiempo_inicio);
 
     return 0;
 }
