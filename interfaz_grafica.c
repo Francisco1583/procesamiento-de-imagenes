@@ -79,6 +79,8 @@ static void normalize_kernel(int *kernel) {
 
 /* Obtiene el directorio donde se ejecuta el programa,
 permitiendo trabajar con rutas relativas de forma consistente */
+/* Obtiene el directorio donde se ejecuta el programa,
+permitiendo trabajar con rutas relativas de forma consistente */
 static void get_executable_directory(char *buffer, size_t buffer_size) {
 #if defined(_WIN32)
     char path[MAX_PATH];
@@ -92,6 +94,21 @@ static void get_executable_directory(char *buffer, size_t buffer_size) {
         *last_slash = '\0';
     }
     safe_copy(buffer, buffer_size, path);
+#else
+    // Implementación agregada para Linux / Unix
+    char path[MAX_PATH];
+    ssize_t count = readlink("/proc/self/exe", path, MAX_PATH);
+    if (count != -1) {
+        path[count] = '\0';
+        char *last_slash = strrchr(path, '/');
+        if (last_slash) {
+            *last_slash = '\0';
+        }
+        safe_copy(buffer, buffer_size, path);
+    } else {
+        // Fallback por si readlink falla
+        safe_copy(buffer, buffer_size, ".");
+    }
 #endif
 }
 
