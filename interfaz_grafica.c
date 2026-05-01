@@ -449,7 +449,7 @@ static void add_files_from_dialog(HWND hwnd) {
 
     char *cursor = file_buffer + first_len + 1;
     while (*cursor) {
-        char full_path[MAX_PATH];
+        char full_path[MAX_PATH + 256];
         snprintf(full_path, sizeof(full_path), "%s\\%s", folder, cursor);
         add_path_to_selection(hwnd, full_path);
         cursor += strlen(cursor) + 1;
@@ -609,14 +609,14 @@ static void create_ui(HWND hwnd) {
         if (GetModuleFileNameW(NULL, exe_w, MAX_PATH) > 0) {
             wchar_t *last = wcsrchr(exe_w, L'\\');
             if (last) *last = L'\0';
-            wchar_t logo_path_w[MAX_PATH];
-            wcscpy_s(logo_path_w, MAX_PATH, exe_w);
-            wcscat_s(logo_path_w, MAX_PATH, L"\\src\\logo.bmp");
+            wchar_t logo_path_w[MAX_PATH + 32];
+            wcscpy_s(logo_path_w, MAX_PATH + 32, exe_w);
+            wcscat_s(logo_path_w, MAX_PATH + 32, L"\\src\\logo.bmp");
             g_logo_bitmap = create_scaled_hbitmap_from_file_w(logo_path_w, LOGO_CANVAS_WIDTH, LOGO_CANVAS_HEIGHT);
         }
 
         if (!g_logo_bitmap) {
-            char logo_path_a[MAX_PATH];
+            char logo_path_a[MAX_PATH + 32];
             snprintf(logo_path_a, sizeof(logo_path_a), "%s\\src\\logo.bmp", g_executable_directory);
             wchar_t logo_path_w[MAX_PATH];
             MultiByteToWideChar(CP_ACP, 0, logo_path_a, -1, logo_path_w, MAX_PATH);
@@ -632,7 +632,7 @@ static void create_ui(HWND hwnd) {
         } else {
             /* Debug: inform which paths were tried when logo failed to load */
             char tried_msg[1024] = "Tried paths:\n";
-            char logo_path_a[MAX_PATH];
+            char logo_path_a[MAX_PATH + 32];
             snprintf(logo_path_a, sizeof(logo_path_a), "%s\\src\\logo.bmp", g_executable_directory);
             strncat(tried_msg, logo_path_a, sizeof(tried_msg) - strlen(tried_msg) - 1);
             MessageBoxA(hwnd, tried_msg, "Logo not loaded", MB_OK | MB_ICONWARNING);
@@ -932,7 +932,7 @@ static void on_execute_clicked(GtkButton *button, gpointer user_data) {
     RunStats stats = run_transformations(&g_app.selection, &config, g_app.output_directory);
     gtk_update_runtime_label(stats.elapsed_seconds);
 
-    char summary[1024];
+    char summary[5120];  /* Buffer large enough for MAX_PATH + format string overhead */
     snprintf(summary, sizeof(summary),
              "Processing completed in %.4f seconds.\n"
              "Generated files: %d/%d\n"
@@ -1075,7 +1075,7 @@ static void build_gtk_ui(GtkApplication *app, gpointer user_data) {
     {
         char exe_dir[MAX_PATH];
         get_executable_directory(exe_dir, sizeof(exe_dir));
-        char logo_path[MAX_PATH];
+        char logo_path[MAX_PATH + 32];  /* Extra space for /src/logo.bmp suffix */
         snprintf(logo_path, sizeof(logo_path), "%s/src/logo.bmp", exe_dir);
         if (g_file_test(logo_path, G_FILE_TEST_EXISTS)) {
             GdkPixbuf *pix = gdk_pixbuf_new_from_file_at_scale(logo_path, LOGO_CANVAS_WIDTH, LOGO_CANVAS_HEIGHT, TRUE, NULL);
