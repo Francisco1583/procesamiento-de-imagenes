@@ -257,7 +257,7 @@ sudo apt install build-essential pkg-config libgtk-3-dev
 Compilar y ejecutar:
 ```bash
 cd /ruta/al/proyecto
-gcc "interfaz_grafica.c" -o interfaz_grafica $(pkg-config --cflags --libs gtk+-3.0) -fopenmp
+gcc "interfaz_grafica.c" -o interfaz_grafica $(pkg-config --cflags --libs gtk+-3.0) -fopenmp -Wall -Wextra
 ./interfaz_grafica
 ```
 
