@@ -54,6 +54,8 @@ typedef struct {
 
 static const char *k_output_folder_name = "img";
 
+/* Copia segura de strings evitando overflow y asegurando terminación nula
+Se usa en todo el programa para prevenir vulnerabilidades de memoria */
 static void safe_copy(char *destination, size_t destination_size, const char *source) {
     if (destination_size == 0) {
         return;
@@ -62,6 +64,9 @@ static void safe_copy(char *destination, size_t destination_size, const char *so
     destination[destination_size - 1] = '\0';
 }
 
+/* Asegura que el kernel sea válido para convolución:
+- Mínimo 1
+- Siempre impar (requisito en filtros como blur) */
 static void normalize_kernel(int *kernel) {
     if (*kernel < 1) {
         *kernel = 1;
@@ -71,6 +76,8 @@ static void normalize_kernel(int *kernel) {
     }
 }
 
+/* Obtiene el directorio donde se ejecuta el programa,
+permitiendo trabajar con rutas relativas de forma consistente */
 static void get_executable_directory(char *buffer, size_t buffer_size) {
 #if defined(_WIN32)
     char path[MAX_PATH];
@@ -87,6 +94,8 @@ static void get_executable_directory(char *buffer, size_t buffer_size) {
 #endif
 }
 
+/* Cambia el directorio actual del proceso,
+lo cual afecta todas las operaciones de archivos posteriores */
 static void make_output_directory(char *output_directory, size_t output_directory_size) {
     char executable_directory[MAX_PATH];
     get_executable_directory(executable_directory, sizeof(executable_directory));
@@ -98,6 +107,8 @@ static void make_output_directory(char *output_directory, size_t output_director
 #endif
 }
 
+/* Extrae el nombre del archivo sin ruta ni extensión
+Se usa para generar nombres de salida */
 static const char *basename_without_extension(const char *path, char *buffer, size_t buffer_size) {
     const char *file_name = path;
     const char *slash_a = strrchr(path, '/');
@@ -131,6 +142,8 @@ static int file_exists(const char *path) {
     return 0;
 }
 
+/* Convierte el nombre a un formato seguro para archivos:
+// elimina caracteres inválidos y evita nombres vacíos */
 static void make_safe_stem(const char *raw_stem, char *safe_stem, size_t safe_stem_size) {
     size_t limit = safe_stem_size > 0 ? safe_stem_size - 1 : 0;
     size_t out_idx = 0;
@@ -153,6 +166,8 @@ static void make_safe_stem(const char *raw_stem, char *safe_stem, size_t safe_st
     safe_stem[out_idx] = '\0';
 }
 
+/* Verifica si el archivo de salida realmente fue creado:
+Valida existencia física en disco */
 static void update_stats_for_output(RunStats *stats, const char *output_directory, const char *output_name) {
     char output_file[MAX_PATH];
 #if defined(_WIN32)
@@ -165,14 +180,17 @@ static void update_stats_for_output(RunStats *stats, const char *output_director
     }
 }
 
+/* Configura número de hilos OpenMP.
+Si no se especifica, usa 18 por defecto */
 static RunStats run_transformations(const ImageSelection *selection, const TransformConfig *config, const char *output_directory) {
     RunStats stats;
     memset(&stats, 0, sizeof(stats));
 
     omp_set_num_threads(config->threads > 0 ? config->threads : 18);
 
-    double start_time = omp_get_wtime();
+    double start_time = omp_get_wtime(); // Inicio de medición de tiempo usando OpenMP
 
+    // Verifica que el archivo exista antes de procesarlo
     for (int i = 0; i < selection->count; i++) {
         FILE *input_test = fopen(selection->files[i], "rb");
         if (!input_test) {
@@ -189,7 +207,7 @@ static RunStats run_transformations(const ImageSelection *selection, const Trans
         char output_name[MAX_PATH];
 
         if (config->use_invert_gray) {
-            snprintf(output_name, sizeof(output_name), "%s_inv_gray", safe_stem);
+            snprintf(output_name, sizeof(output_name), "%s_inv_gray", safe_stem); // Construye nombres de salida basados en tipo de transformación
             inv_img(output_name, selection->files[i]);
             update_stats_for_output(&stats, output_directory, output_name);
         }
@@ -225,7 +243,7 @@ static RunStats run_transformations(const ImageSelection *selection, const Trans
         }
     }
 
-    stats.elapsed_seconds = omp_get_wtime() - start_time;
+    stats.elapsed_seconds = omp_get_wtime() - start_time; // Calcula tiempo total de ejecución del procesamiento
     return stats;
 }
 
@@ -279,6 +297,7 @@ static int get_int_from_edit(HWND hwnd, int fallback) {
     return (int)value;
 }
 
+// Limita a MAX_IMAGES (10) para evitar sobrecarga
 static void add_path_to_selection(HWND hwnd, const char *path) {
     if (g_selection.count >= MAX_IMAGES) {
         MessageBoxA(hwnd, "You can select up to 10 BMP files.", "Limit reached", MB_ICONWARNING | MB_OK);
@@ -296,6 +315,8 @@ static void add_path_to_selection(HWND hwnd, const char *path) {
     refresh_file_list();
 }
 
+/* Manejo especial de buffer cuando se seleccionan múltiples archivos:
+Formato: [carpeta]\0[file1]\0[file2]...\0\0 */
 static void add_files_from_dialog(HWND hwnd) {
     char file_buffer[8192] = {0};
     OPENFILENAMEA ofn;
@@ -351,6 +372,7 @@ static void update_runtime_label(double elapsed_seconds) {
     SetWindowTextA(g_runtime_label, buffer);
 }
 
+// Verifica que al menos una transformación esté seleccionada
 static void execute_processing(HWND hwnd) {
     if (g_selection.count == 0) {
         MessageBoxA(hwnd, "Please add at least one BMP file.", "Missing input", MB_ICONWARNING | MB_OK);
@@ -376,13 +398,14 @@ static void execute_processing(HWND hwnd) {
         return;
     }
 
-    // Keep relative output paths stable even after file chooser interactions.
+    // Mantiene rutas estables de salida relativas
     SetCurrentDirectoryA(g_executable_directory);
     make_output_directory(g_output_directory, sizeof(g_output_directory));
     SetWindowTextA(g_output_dir_label, g_output_directory);
 
-    RunStats stats = run_transformations(&g_selection, &config, g_output_directory);
-    update_runtime_label(stats.elapsed_seconds);
+    RunStats stats = run_transformations(&g_selection, &config, g_output_directory); // Se reportan resultados reales
+    update_runtime_label(stats.elapsed_seconds); 
+
 
     char message[512];
     snprintf(message, sizeof(message),
@@ -503,6 +526,7 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                     return 0;
             }
 
+        // Solo acepta archivos .bmp.
         case WM_DROPFILES: {
             HDROP drop = (HDROP)wParam;
             UINT file_count = DragQueryFileA(drop, 0xFFFFFFFF, NULL, 0);
@@ -566,6 +590,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     UpdateWindow(hwnd);
 
     MSG msg;
+    /* Loop principal de eventos (message loop).
+    Controla toda la interacción de la UI. */
     while (GetMessageA(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageA(&msg);
