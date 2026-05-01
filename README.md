@@ -122,7 +122,105 @@ Los resultados indican que Linux Bodhi (Laptop B) presenta una ventaja considera
 
 ---
 
-## 8. Compilación y ejecución de la interfaz gráfica
+## 8. Arquitectura y flujo de datos: Cómo la UI conecta con el backend
+
+### Estructura del proyecto
+
+El código está dividido en capas bien definidas:
+
+```
+interfaz_grafica.c (UI Layer)
+    ↓ (Captura parámetros de la UI)
+TransformConfig struct (Configuración)
+    ↓ (Envía a función de procesamiento)
+run_transformations() (Coordinador)
+    ↓ (Llama funciones del backend)
+selec_proc.h / selec_proc_1.h (Backend - Transformaciones)
+    ↓ (Escriben resultados)
+img/ (Directorio de salida)
+```
+
+### Flujo de ejecución: De la UI al resultado
+
+#### 1. **Usuario interactúa con la UI**
+- Selecciona archivos BMP mediante "Add images..." (máximo 10 archivos)
+- Marca checkboxes para seleccionar transformaciones
+- Ingresa valores: número de hilos OpenMP, tamaños de kernel
+- Hace clic en "Execute"
+
+#### 2. **execute_processing() captura datos**
+```c
+/* CAPTURA DE DATOS DE LA UI */
+config.use_invert_gray = is_checked(g_checks[0]);  // ¿Inversión vertical grayscale?
+config.use_flip_gray = is_checked(g_checks[2]);    // ¿Flip horizontal grayscale?
+config.threads = get_int_from_edit(g_edit_threads, 18); // ¿Cuántos hilos?
+config.kernel_gray = get_int_from_edit(g_edit_kernel_gray, 27); // ¿Tamaño kernel?
+```
+
+Construye una estructura `TransformConfig` con todos los parámetros y la pasa a `run_transformations()`.
+
+#### 3. **run_transformations() coordina el backend**
+Esta función es el "orquestador" que:
+- Configura OpenMP con el número de hilos del usuario
+- Itera sobre cada archivo seleccionado
+- **Llama las funciones del backend según las transformaciones activadas**:
+
+```c
+if (config.use_invert_gray) {
+    inv_img(output_name, selection->files[i]); // ← LLAMA AL BACKEND
+}
+if (config.use_blur_gray) {
+    desenfoque(selection->files[i], output_name, config->kernel_gray); // ← LLAMA AL BACKEND
+}
+```
+
+#### 4. **Backend procesa las imágenes**
+
+Las funciones importadas de `selec_proc.h` y `selec_proc_1.h`:
+
+| Función | Archivo de entrada | Salida | Parámetro |
+|---------|------------------|--------|-----------|
+| `inv_img()` | BMP | `output_name_inv_gray.bmp` | ninguno |
+| `inv_img_color()` | BMP | `output_name_inv_color.bmp` | ninguno |
+| `inv_img_grey_horizontal()` | BMP | `output_name_flip_gray.bmp` | ninguno |
+| `inv_img_color_horizontal()` | BMP | `output_name_flip_color.bmp` | ninguno |
+| `desenfoque()` | BMP | `output_name_blur_gray.bmp` | `kernel_size` |
+| `desenfoque_color()` | BMP | `output_name_blur_color.bmp` | `kernel_size` |
+
+**Características del backend:**
+- Usan OpenMP internamente para paralelizar el procesamiento (benefician del `omp_set_num_threads()` configurado en `run_transformations()`)
+- Escriben automáticamente los resultados en el directorio `img/` (relativo al ejecutable)
+- No retornan valores, solo escriben archivos
+
+#### 5. **Reporte de resultados**
+
+`update_stats_for_output()` verifica que cada archivo se creó exitosamente:
+```c
+stats.expected_outputs++;  // Contabiliza transformaciones solicitadas
+if (file_exists(output_file)) {
+    stats.generated_outputs++;  // Incrementa si el archivo existe en disco
+}
+```
+
+Al finalizar, `run_transformations()` retorna:
+- `elapsed_seconds`: Tiempo total de procesamiento
+- `expected_outputs`: Archivos que debería haber generado
+- `generated_outputs`: Archivos que realmente existen
+- `skipped_inputs`: Archivos que no pudieron procesarse
+
+Estos valores se muestran en un diálogo al usuario y se actualiza la etiqueta "Execution time:" en la UI.
+
+### Puntos clave de conexión
+
+1. **Captura de parámetros**: `is_checked()` y `get_int_from_edit()` leen controles WinAPI/GTK
+2. **Invocación de backend**: `run_transformations()` llama funciones de `selec_proc.h` con los parámetros
+3. **Reporte de progreso**: `update_stats_for_output()` valida que los archivos se crearon
+4. **Gestión de directorios**: `make_output_directory()` garantiza que "img/" exista antes de ejecutar backend
+5. **Control de hilos**: `omp_set_num_threads()` se configura una sola vez al inicio de `run_transformations()`
+
+---
+
+## 9. Compilación y ejecución de la interfaz gráfica
 
 El código de la interfaz está en `interfaz_grafica.c`. A continuación se indican los comandos y dependencias necesarias por plataforma.
 

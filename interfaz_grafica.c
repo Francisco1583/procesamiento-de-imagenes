@@ -95,8 +95,10 @@ static void get_executable_directory(char *buffer, size_t buffer_size) {
 #endif
 }
 
-/* Cambia el directorio actual del proceso,
-lo cual afecta todas las operaciones de archivos posteriores */
+/* Crea el directorio de salida "img" relativo al ejecutable.
+Todas las funciones de transformación (inv_img, inv_img_color, etc.)
+escriben sus resultados en este directorio.
+Cambia el directorio de trabajo para garantizar que las rutas relativas funcionen. */
 static void make_output_directory(char *output_directory, size_t output_directory_size) {
     char executable_directory[MAX_PATH];
     get_executable_directory(executable_directory, sizeof(executable_directory));
@@ -105,6 +107,10 @@ static void make_output_directory(char *output_directory, size_t output_director
     SetCurrentDirectoryA(executable_directory);
     snprintf(output_directory, output_directory_size, "%s\\%s", executable_directory, k_output_folder_name);
     CreateDirectoryA(k_output_folder_name, NULL);
+#else
+    chdir(executable_directory);
+    snprintf(output_directory, output_directory_size, "%s/%s", executable_directory, k_output_folder_name);
+    mkdir(k_output_folder_name, 0755);
 #endif
 }
 
@@ -181,17 +187,31 @@ static void update_stats_for_output(RunStats *stats, const char *output_director
     }
 }
 
-/* Configura número de hilos OpenMP.
-Si no se especifica, usa 18 por defecto */
+/* CONEXIÓN UI ↔ BACKEND:
+   Las funciones de transformación se importan de selec_proc.h y selec_proc_1.h:
+   - inv_img() / inv_img_color()        → Inversión vertical (grayscale/color)
+   - inv_img_grey_horizontal() / inv_img_color_horizontal() → Flip horizontal
+   - desenfoque() / desenfoque_color()  → Blur/Convolución (grayscale/color)
+   
+   Cada función recibe:
+     - output_name: Nombre base del archivo de salida (ej: "foto_inv_gray")
+     - input_file: Ruta al BMP original
+     - kernel (para blur): Tamaño de filtro
+   
+   Las funciones escriben automáticamente en el directorio "img" y retornan void.
+   update_stats_for_output() verifica que el archivo se creó en disco.
+
+   OpenMP se configura una sola vez al inicio con omp_set_num_threads()
+   para paralelizar el trabajo dentro de cada función de transformación. */
 static RunStats run_transformations(const ImageSelection *selection, const TransformConfig *config, const char *output_directory) {
     RunStats stats;
     memset(&stats, 0, sizeof(stats));
 
-    omp_set_num_threads(config->threads > 0 ? config->threads : 18);
+    omp_set_num_threads(config->threads > 0 ? config->threads : 18); // Configura número de hilos OpenMP
 
     double start_time = omp_get_wtime(); // Inicio de medición de tiempo usando OpenMP
 
-    // Verifica que el archivo exista antes de procesarlo
+    // Procesa cada imagen seleccionada por el usuario
     for (int i = 0; i < selection->count; i++) {
         FILE *input_test = fopen(selection->files[i], "rb");
         if (!input_test) {
@@ -207,44 +227,45 @@ static RunStats run_transformations(const ImageSelection *selection, const Trans
 
         char output_name[MAX_PATH];
 
+        /* Llamadas al BACKEND: cada checkbox activado en la UI dispara una función de transformación */
         if (config->use_invert_gray) {
-            snprintf(output_name, sizeof(output_name), "%s_inv_gray", safe_stem); // Construye nombres de salida basados en tipo de transformación
-            inv_img(output_name, selection->files[i]);
+            snprintf(output_name, sizeof(output_name), "%s_inv_gray", safe_stem);
+            inv_img(output_name, selection->files[i]); // Llama función del backend (selec_proc.h)
             update_stats_for_output(&stats, output_directory, output_name);
         }
 
         if (config->use_invert_color) {
             snprintf(output_name, sizeof(output_name), "%s_inv_color", safe_stem);
-            inv_img_color(output_name, selection->files[i]);
+            inv_img_color(output_name, selection->files[i]); // Llama función del backend
             update_stats_for_output(&stats, output_directory, output_name);
         }
 
         if (config->use_flip_gray) {
             snprintf(output_name, sizeof(output_name), "%s_flip_gray", safe_stem);
-            inv_img_grey_horizontal(output_name, selection->files[i]);
+            inv_img_grey_horizontal(output_name, selection->files[i]); // Llama función del backend
             update_stats_for_output(&stats, output_directory, output_name);
         }
 
         if (config->use_flip_color) {
             snprintf(output_name, sizeof(output_name), "%s_flip_color", safe_stem);
-            inv_img_color_horizontal(output_name, selection->files[i]);
+            inv_img_color_horizontal(output_name, selection->files[i]); // Llama función del backend
             update_stats_for_output(&stats, output_directory, output_name);
         }
 
         if (config->use_blur_gray) {
             snprintf(output_name, sizeof(output_name), "%s_blur_gray", safe_stem);
-            desenfoque(selection->files[i], output_name, config->kernel_gray);
+            desenfoque(selection->files[i], output_name, config->kernel_gray); // Llama función del backend
             update_stats_for_output(&stats, output_directory, output_name);
         }
 
         if (config->use_blur_color) {
             snprintf(output_name, sizeof(output_name), "%s_blur_color", safe_stem);
-            desenfoque_color(selection->files[i], output_name, config->kernel_color);
+            desenfoque_color(selection->files[i], output_name, config->kernel_color); // Llama función del backend
             update_stats_for_output(&stats, output_directory, output_name);
         }
     }
 
-    stats.elapsed_seconds = omp_get_wtime() - start_time; // Calcula tiempo total de ejecución del procesamiento
+    stats.elapsed_seconds = omp_get_wtime() - start_time; // Calcula tiempo total de ejecución
     return stats;
 }
 
@@ -451,41 +472,53 @@ static void update_runtime_label(double elapsed_seconds) {
     SetWindowTextA(g_runtime_label, buffer);
 }
 
-// Verifica que al menos una transformación esté seleccionada
+/* CAPTURA DE DATOS DE LA UI → CONFIGURACIÓN DEL BACKEND
+   Esta función es el "puente" entre la interfaz gráfica y las funciones de transformación:
+   
+   1. Lee estado de checkboxes (qué transformaciones seleccionar el usuario)
+   2. Lee valores numéricos (hilos, tamaños de kernel)
+   3. Construye un objeto TransformConfig
+   4. Llama a run_transformations() que ejecuta todas las transformaciones
+   5. Actualiza etiquetas de la UI con los resultados (tiempo, cantidad de archivos)
+*/
 static void execute_processing(HWND hwnd) {
     if (g_selection.count == 0) {
         MessageBoxA(hwnd, "Please add at least one BMP file.", "Missing input", MB_ICONWARNING | MB_OK);
         return;
     }
 
+    /* Captura estado de cada control de la UI */
     TransformConfig config = {0};
-    config.use_invert_gray = is_checked(g_checks[0]);
-    config.use_invert_color = is_checked(g_checks[1]);
-    config.use_flip_gray = is_checked(g_checks[2]);
-    config.use_flip_color = is_checked(g_checks[3]);
-    config.use_blur_gray = is_checked(g_checks[4]);
-    config.use_blur_color = is_checked(g_checks[5]);
-    config.threads = get_int_from_edit(g_edit_threads, 18);
-    config.kernel_gray = get_int_from_edit(g_edit_kernel_gray, 27);
-    config.kernel_color = get_int_from_edit(g_edit_kernel_color, 27);
+    config.use_invert_gray = is_checked(g_checks[0]);      // Checkbox "1 - Vertical grayscale"
+    config.use_invert_color = is_checked(g_checks[1]);    // Checkbox "2 - Vertical color"
+    config.use_flip_gray = is_checked(g_checks[2]);       // Checkbox "3 - Horizontal grayscale"
+    config.use_flip_color = is_checked(g_checks[3]);      // Checkbox "4 - Horizontal color"
+    config.use_blur_gray = is_checked(g_checks[4]);       // Checkbox "5 - Grayscale blur"
+    config.use_blur_color = is_checked(g_checks[5]);      // Checkbox "6 - Color blur"
+    config.threads = get_int_from_edit(g_edit_threads, 18);           // Campo "OpenMP threads"
+    config.kernel_gray = get_int_from_edit(g_edit_kernel_gray, 27);   // Campo "Kernel" (grayscale)
+    config.kernel_color = get_int_from_edit(g_edit_kernel_color, 27); // Campo "Kernel" (color)
     set_even_or_odd_kernel_text(&config.kernel_gray);
     set_even_or_odd_kernel_text(&config.kernel_color);
 
+    /* Valida que al menos una transformación esté seleccionada */
     if (!config.use_invert_gray && !config.use_invert_color && !config.use_flip_gray &&
         !config.use_flip_color && !config.use_blur_gray && !config.use_blur_color) {
         MessageBoxA(hwnd, "Select at least one transformation or click All.", "Missing option", MB_ICONWARNING | MB_OK);
         return;
     }
 
-    // Mantiene rutas estables de salida relativas
+    /* Prepara el directorio de salida y cambios de trabajo */
     SetCurrentDirectoryA(g_executable_directory);
     make_output_directory(g_output_directory, sizeof(g_output_directory));
     SetWindowTextA(g_output_dir_label, g_output_directory);
 
-    RunStats stats = run_transformations(&g_selection, &config, g_output_directory); // Se reportan resultados reales
+    /* LLAMADA AL BACKEND: run_transformations() ejecuta todas las transformaciones
+       usando los parámetros capturados de la UI */
+    RunStats stats = run_transformations(&g_selection, &config, g_output_directory);
     update_runtime_label(stats.elapsed_seconds); 
 
-
+    /* Muestra resultados: archivos generados, archivos saltados, tiempo total */
     char message[512];
     snprintf(message, sizeof(message),
              "Processing completed in %.4f seconds.\n"
