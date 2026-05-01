@@ -8,6 +8,7 @@
 #include <windows.h>
 #include <commdlg.h>
 #include <shellapi.h>
+#include <gdiplus.h>
 #else
 #include <gtk/gtk.h>
 #include <unistd.h>
@@ -276,6 +277,13 @@ static RunStats run_transformations(const ImageSelection *selection, const Trans
 #define ID_CHECK_H_C     303
 #define ID_CHECK_BLUR_G  304
 #define ID_CHECK_BLUR_C  305
+#define ID_BTN_ABOUT     400
+#define ID_STATIC_LOGO   401
+
+#define LOGO_CANVAS_WIDTH 180
+#define LOGO_CANVAS_HEIGHT 150
+#define LOGO_RIGHT_MARGIN 28
+#define LOGO_BOTTOM_MARGIN 60
 
 static ImageSelection g_selection = {0};
 static HWND g_list_files = NULL;
@@ -287,6 +295,77 @@ static HWND g_runtime_label = NULL;
 static HWND g_checks[6] = {0};
 static char g_output_directory[MAX_PATH] = {0};
 static char g_executable_directory[MAX_PATH] = {0};
+static HBITMAP g_logo_bitmap = NULL;
+static ULONG_PTR g_gdiplus_token = 0;
+static int g_gdiplus_started = 0;
+
+static HBITMAP create_scaled_hbitmap_from_file_w(const wchar_t *image_path, int canvas_width, int canvas_height) {
+    if (!image_path || canvas_width <= 0 || canvas_height <= 0) {
+        return NULL;
+    }
+
+    if (!g_gdiplus_started) {
+        GdiplusStartupInput gdiplusStartupInput = {0};
+        gdiplusStartupInput.GdiplusVersion = 1;
+        if (GdiplusStartup(&g_gdiplus_token, &gdiplusStartupInput, NULL) == 0) {
+            g_gdiplus_started = 1;
+        }
+    }
+
+    if (!g_gdiplus_started) {
+        return NULL;
+    }
+
+    GpImage *source_image = NULL;
+    if (GdipLoadImageFromFile(image_path, &source_image) != 0 || source_image == NULL) {
+        return NULL;
+    }
+
+    UINT source_width = 0;
+    UINT source_height = 0;
+    if (GdipGetImageWidth(source_image, &source_width) != 0 || GdipGetImageHeight(source_image, &source_height) != 0 || source_width == 0 || source_height == 0) {
+        GdipDisposeImage(source_image);
+        return NULL;
+    }
+
+    GpBitmap *scaled_bitmap = NULL;
+    if (GdipCreateBitmapFromScan0(canvas_width, canvas_height, 0, PixelFormat32bppARGB, NULL, &scaled_bitmap) != 0 || scaled_bitmap == NULL) {
+        GdipDisposeImage(source_image);
+        return NULL;
+    }
+
+    GpGraphics *graphics = NULL;
+    if (GdipGetImageGraphicsContext((GpImage *)scaled_bitmap, &graphics) != 0 || graphics == NULL) {
+        GdipDisposeImage((GpImage *)scaled_bitmap);
+        GdipDisposeImage(source_image);
+        return NULL;
+    }
+
+    GdipSetInterpolationMode(graphics, InterpolationModeHighQualityBicubic);
+    GdipSetCompositingQuality(graphics, CompositingQualityHighQuality);
+    GdipSetSmoothingMode(graphics, SmoothingModeHighQuality);
+    GdipGraphicsClear(graphics, 0xFFFFFFFF);
+
+    double scale_x = (double)canvas_width / (double)source_width;
+    double scale_y = (double)canvas_height / (double)source_height;
+    double scale = scale_x < scale_y ? scale_x : scale_y;
+    int draw_width = (int)(source_width * scale + 0.5);
+    int draw_height = (int)(source_height * scale + 0.5);
+    int draw_x = (canvas_width - draw_width) / 2;
+    int draw_y = (canvas_height - draw_height) / 2;
+
+    GdipDrawImageRectI(graphics, source_image, draw_x, draw_y, draw_width, draw_height);
+
+    HBITMAP result_bitmap = NULL;
+    if (GdipCreateHBITMAPFromBitmap(scaled_bitmap, &result_bitmap, 0xFFFFFFFF) != 0) {
+        result_bitmap = NULL;
+    }
+
+    GdipDeleteGraphics(graphics);
+    GdipDisposeImage((GpImage *)scaled_bitmap);
+    GdipDisposeImage(source_image);
+    return result_bitmap;
+}
 
 static void refresh_file_list(void) {
     SendMessageA(g_list_files, LB_RESETCONTENT, 0, 0);
@@ -470,12 +549,12 @@ static void create_ui(HWND hwnd) {
     g_checks[5] = CreateWindowA("BUTTON", "6 - Color blur", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                 500, 195, 240, 24, hwnd, (HMENU)ID_CHECK_BLUR_C, NULL, NULL);
 
-    CreateWindowA("STATIC", "Gray kernel:", WS_CHILD | WS_VISIBLE,
+    CreateWindowA("STATIC", "Kernel:", WS_CHILD | WS_VISIBLE,
                   760, 165, 90, 20, hwnd, NULL, NULL, NULL);
     g_edit_kernel_gray = CreateWindowA("EDIT", "27", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
                                        850, 162, 70, 24, hwnd, (HMENU)ID_EDIT_KERNEL_1, NULL, NULL);
 
-    CreateWindowA("STATIC", "Color kernel:", WS_CHILD | WS_VISIBLE,
+    CreateWindowA("STATIC", "Kernel:", WS_CHILD | WS_VISIBLE,
                   760, 195, 90, 20, hwnd, NULL, NULL, NULL);
     g_edit_kernel_color = CreateWindowA("EDIT", "27", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
                                         850, 192, 70, 24, hwnd, (HMENU)ID_EDIT_KERNEL_2, NULL, NULL);
@@ -488,6 +567,9 @@ static void create_ui(HWND hwnd) {
     CreateWindowA("BUTTON", "Execute", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
                   500, 285, 130, 35, hwnd, (HMENU)ID_BTN_EXEC, NULL, NULL);
 
+    CreateWindowA("BUTTON", "About", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                  640, 285, 80, 35, hwnd, (HMENU)ID_BTN_ABOUT, NULL, NULL);
+
     CreateWindowA("STATIC", "Output directory:", WS_CHILD | WS_VISIBLE,
                   20, 395, 110, 20, hwnd, NULL, NULL, NULL);
     g_output_dir_label = CreateWindowA("STATIC", g_output_directory, WS_CHILD | WS_VISIBLE,
@@ -495,6 +577,41 @@ static void create_ui(HWND hwnd) {
 
     g_runtime_label = CreateWindowA("STATIC", "Execution time: not run yet", WS_CHILD | WS_VISIBLE,
                                     20, 425, 260, 20, hwnd, NULL, NULL, NULL);
+
+    {
+        wchar_t exe_w[MAX_PATH];
+        if (GetModuleFileNameW(NULL, exe_w, MAX_PATH) > 0) {
+            wchar_t *last = wcsrchr(exe_w, L'\\');
+            if (last) *last = L'\0';
+            wchar_t logo_path_w[MAX_PATH];
+            wcscpy_s(logo_path_w, MAX_PATH, exe_w);
+            wcscat_s(logo_path_w, MAX_PATH, L"\\src\\logo.bmp");
+            g_logo_bitmap = create_scaled_hbitmap_from_file_w(logo_path_w, LOGO_CANVAS_WIDTH, LOGO_CANVAS_HEIGHT);
+        }
+
+        if (!g_logo_bitmap) {
+            char logo_path_a[MAX_PATH];
+            snprintf(logo_path_a, sizeof(logo_path_a), "%s\\src\\logo.bmp", g_executable_directory);
+            wchar_t logo_path_w[MAX_PATH];
+            MultiByteToWideChar(CP_ACP, 0, logo_path_a, -1, logo_path_w, MAX_PATH);
+            g_logo_bitmap = create_scaled_hbitmap_from_file_w(logo_path_w, LOGO_CANVAS_WIDTH, LOGO_CANVAS_HEIGHT);
+        }
+
+        if (g_logo_bitmap) {
+            HWND logo_hwnd = CreateWindowA("STATIC", "", WS_CHILD | WS_VISIBLE | SS_BITMAP | SS_CENTERIMAGE,
+                                           980 - LOGO_CANVAS_WIDTH - LOGO_RIGHT_MARGIN, 520 - LOGO_CANVAS_HEIGHT - LOGO_BOTTOM_MARGIN,
+                                           LOGO_CANVAS_WIDTH, LOGO_CANVAS_HEIGHT, hwnd, (HMENU)ID_STATIC_LOGO, NULL, NULL);
+            SendMessageA(logo_hwnd, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)g_logo_bitmap);
+            InvalidateRect(hwnd, NULL, TRUE);
+        } else {
+            /* Debug: inform which paths were tried when logo failed to load */
+            char tried_msg[1024] = "Tried paths:\n";
+            char logo_path_a[MAX_PATH];
+            snprintf(logo_path_a, sizeof(logo_path_a), "%s\\src\\logo.bmp", g_executable_directory);
+            strncat(tried_msg, logo_path_a, sizeof(tried_msg) - strlen(tried_msg) - 1);
+            MessageBoxA(hwnd, tried_msg, "Logo not loaded", MB_OK | MB_ICONWARNING);
+        }
+    }
 
     SendMessageA(workdir_label, WM_SETFONT, (WPARAM)font, TRUE);
     SendMessageA(g_output_dir_label, WM_SETFONT, (WPARAM)font, TRUE);
@@ -530,6 +647,18 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 case ID_BTN_EXEC:
                     execute_processing(hwnd);
                     return 0;
+                case ID_BTN_ABOUT: {
+                    const wchar_t about_text[] = L"TC3003\n"
+                        L"Tecnol\u00f3gico de Monterrey\n"
+                        L"Campus Puebla\n"
+                        L"Mayo 2026\n\n"
+                        L"- Alejandro Santana Moreno (A01733717)\n"
+                        L"- Francisco Antonio Lopez Ricardez (A01737275)\n"
+                        L"- Humberto P\u00e9rez Galindo (A01732526)\n"
+                        L"- Yahel Alejandro Jim\u00e9nez Fern\u00e1ndez (A01736980)";
+                    MessageBoxW(hwnd, about_text, L"About", MB_ICONINFORMATION | MB_OK);
+                    return 0;
+                }
                 default:
                     return 0;
             }
@@ -551,6 +680,13 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
 
         case WM_DESTROY:
+            if (g_logo_bitmap) {
+                DeleteObject(g_logo_bitmap);
+            }
+            if (g_gdiplus_started) {
+                GdiplusShutdown(g_gdiplus_token);
+                g_gdiplus_started = 0;
+            }
             PostQuitMessage(0);
             return 0;
     }
@@ -568,6 +704,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     wc.lpszClassName = "ImageProcessingGUI";
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+
+    /* Initialize GDI+ for image loading (used as a fallback) */
+    {
+        GdiplusStartupInput gdiplusStartupInput = {0};
+        gdiplusStartupInput.GdiplusVersion = 1;
+        if (GdiplusStartup(&g_gdiplus_token, &gdiplusStartupInput, NULL) == 0) {
+            g_gdiplus_started = 1;
+        }
+    }
 
     if (!RegisterClassA(&wc)) {
         MessageBoxA(NULL, "Unable to register the window class.", "Error", MB_ICONERROR | MB_OK);
@@ -775,6 +920,23 @@ static void on_execute_clicked(GtkButton *button, gpointer user_data) {
     gtk_widget_destroy(dialog);
 }
 
+static void on_about_clicked(GtkButton *button, gpointer user_data) {
+    (void)button; (void)user_data;
+    const char *about_text = "TC3003\n"
+        "Tecnol\u00f3gico de Monterrey\n"
+        "Campus Puebla\n"
+        "Mayo 2026\n\n"
+        "- Alejandro Santana Moreno (A01733717)\n"
+        "- Francisco Antonio Lopez Ricardez (A01737275)\n"
+        "- Humberto P\u00e9rez Galindo (A01732526)\n"
+        "- Yahel Alejandro Jim\u00e9nez Fern\u00e1ndez (A01736980)";
+
+    GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(g_app.window), GTK_DIALOG_MODAL,
+                                               GTK_MESSAGE_INFO, GTK_BUTTONS_OK, "%s", about_text);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+}
+
 static GtkWidget *make_section_label(const char *text) {
     GtkWidget *label = gtk_label_new(text);
     gtk_widget_set_halign(label, GTK_ALIGN_START);
@@ -849,12 +1011,12 @@ static void build_gtk_ui(GtkApplication *app, gpointer user_data) {
     gtk_grid_set_column_spacing(GTK_GRID(kernel_row), 10);
     gtk_box_pack_start(GTK_BOX(right), kernel_row, FALSE, FALSE, 0);
 
-    gtk_grid_attach(GTK_GRID(kernel_row), make_section_label("Gray kernel:"), 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(kernel_row), make_section_label("Kernel:"), 0, 0, 1, 1);
     g_app.kernel_gray_entry = gtk_entry_new();
     gtk_entry_set_text(GTK_ENTRY(g_app.kernel_gray_entry), "27");
     gtk_grid_attach(GTK_GRID(kernel_row), g_app.kernel_gray_entry, 1, 0, 1, 1);
 
-    gtk_grid_attach(GTK_GRID(kernel_row), make_section_label("Color kernel:"), 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(kernel_row), make_section_label("Kernel:"), 0, 1, 1, 1);
     g_app.kernel_color_entry = gtk_entry_new();
     gtk_entry_set_text(GTK_ENTRY(g_app.kernel_color_entry), "27");
     gtk_grid_attach(GTK_GRID(kernel_row), g_app.kernel_color_entry, 1, 1, 1, 1);
@@ -866,6 +1028,8 @@ static void build_gtk_ui(GtkApplication *app, gpointer user_data) {
 
     GtkWidget *execute_button = gtk_button_new_with_label("Execute");
     gtk_box_pack_start(GTK_BOX(right), execute_button, FALSE, FALSE, 8);
+    GtkWidget *about_button = gtk_button_new_with_label("About");
+    gtk_box_pack_start(GTK_BOX(right), about_button, FALSE, FALSE, 0);
 
     g_app.output_label = gtk_label_new(NULL);
     gtk_label_set_xalign(GTK_LABEL(g_app.output_label), 0.0f);
@@ -878,12 +1042,32 @@ static void build_gtk_ui(GtkApplication *app, gpointer user_data) {
     gtk_label_set_xalign(GTK_LABEL(g_app.runtime_label), 0.0f);
     gtk_box_pack_start(GTK_BOX(root), g_app.runtime_label, FALSE, FALSE, 0);
 
+    /* Try to load the logo (src/logo.bmp) and show it on the right side */
+    {
+        char exe_dir[MAX_PATH];
+        get_executable_directory(exe_dir, sizeof(exe_dir));
+        char logo_path[MAX_PATH];
+        snprintf(logo_path, sizeof(logo_path), "%s/src/logo.bmp", exe_dir);
+        if (g_file_test(logo_path, G_FILE_TEST_EXISTS)) {
+            GdkPixbuf *pix = gdk_pixbuf_new_from_file_at_scale(logo_path, LOGO_CANVAS_WIDTH, LOGO_CANVAS_HEIGHT, TRUE, NULL);
+            if (pix) {
+                GtkWidget *image = gtk_image_new_from_pixbuf(pix);
+                gtk_widget_set_margin_end(image, LOGO_RIGHT_MARGIN);
+                gtk_widget_set_margin_bottom(image, LOGO_BOTTOM_MARGIN);
+                gtk_widget_set_size_request(image, LOGO_CANVAS_WIDTH, LOGO_CANVAS_HEIGHT);
+                gtk_box_pack_end(GTK_BOX(content), image, FALSE, FALSE, 0);
+                g_object_unref(pix);
+            }
+        }
+    }
+
     gtk_refresh_file_view();
 
     g_signal_connect(add_button, "clicked", G_CALLBACK(on_add_files_clicked), NULL);
     g_signal_connect(clear_button, "clicked", G_CALLBACK(on_clear_clicked), NULL);
     g_signal_connect(all_button, "clicked", G_CALLBACK(on_all_clicked), NULL);
     g_signal_connect(execute_button, "clicked", G_CALLBACK(on_execute_clicked), NULL);
+    g_signal_connect(about_button, "clicked", G_CALLBACK(on_about_clicked), NULL);
 
     gtk_widget_show_all(g_app.window);
 }

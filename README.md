@@ -122,24 +122,71 @@ Los resultados indican que Linux Bodhi (Laptop B) presenta una ventaja considera
 
 ---
 
-## 8. GUI build and execution
+## 8. Compilación y ejecución de la interfaz gráfica
 
-The graphical interface is implemented in `interfaz_grafica.c` and is designed to be built per platform with the same source file:
+El código de la interfaz está en `interfaz_grafica.c`. A continuación se indican los comandos y dependencias necesarias por plataforma.
 
-### Windows
+Nota importante: en Windows se añade un loader basado en GDI+ que carga y escala la imagen del logo antes de pintarla, por lo que evita que se vea recortada. También permite leer formatos comunes como BMP, JPG y PNG. Por tanto al compilar en Windows debe enlazarse con `-lgdiplus`.
 
-```bash
-gcc "interfaz_grafica.c" -o "interfaz_grafica.exe" -fopenmp -lgdi32 -lcomdlg32 -lshell32 -mwindows
+### Windows (MinGW / MSYS2)
+
+Requisitos mínimos:
+- Tener instalado un toolchain de MinGW/MSYS2 o similar.
+- En MSYS2 puede ser necesario instalar el paquete de GDI+ si su distribución lo separa. En general Windows ya dispone de GDI+.
+
+Compilar (versión release, sin consola):
+```powershell
+cd "c:\Users\ATDAC\Documents\REDES - 8VO\codigos emanuel\procesamiento-de-imagenes"
+gcc "interfaz_grafica.c" -o "interfaz_grafica.exe" -fopenmp -lgdiplus -lgdi32 -lcomdlg32 -lshell32 -mwindows
 ```
 
-### Linux and macOS
-
-```bash
-gcc "interfaz_grafica.c" -o "interfaz_grafica" `pkg-config --cflags --libs gtk+-3.0` -fopenmp
+Compilar (debug, con consola para ver mensajes de diagnóstico):
+```powershell
+gcc "interfaz_grafica.c" -o "interfaz_grafica_dbg.exe" -fopenmp -lgdiplus -lgdi32 -lcomdlg32 -lshell32
+.\interfaz_grafica_dbg.exe
 ```
 
-Notes:
+Si su MSYS2 no proporciona `-lgdiplus` directamente, instale el paquete correspondiente (por ejemplo `mingw-w64-x86_64-gdiplus`) o use Visual Studio/MinGW que incluya GDI+.
 
-* The application saves all generated BMP files inside the `img` folder located next to the executable.
-* The interface shows the resolved output directory on screen.
-* The interface also displays the total execution time after the selected transformations finish.
+### Linux (Debian/Ubuntu)
+
+Instale dependencias:
+```bash
+sudo apt update
+sudo apt install build-essential pkg-config libgtk-3-dev
+```
+
+Compilar y ejecutar:
+```bash
+cd /ruta/al/proyecto
+gcc "interfaz_grafica.c" -o interfaz_grafica $(pkg-config --cflags --libs gtk+-3.0) -fopenmp
+./interfaz_grafica
+```
+
+### macOS (Homebrew)
+
+Instale GTK3 (si no está):
+```bash
+brew install gtk+3 pkg-config
+```
+
+Compilar y ejecutar:
+```bash
+gcc "interfaz_grafica.c" -o interfaz_grafica $(pkg-config --cflags --libs gtk+-3.0) -fopenmp
+./interfaz_grafica
+```
+
+### Notas generales
+- Asegúrese de ejecutar el binario desde la carpeta del proyecto para que el loader encuentre `src/logo.bmp` (o ejecute desde el mismo directorio del ejecutable).
+- El logo de la UI se renderiza en un lienzo proporcional de 180×150 píxeles con separación adicional del borde inferior para mantener proporción y evitar recortes.
+- Si el logo no aparece en Windows, use la versión `interfaz_grafica_dbg.exe`; la aplicación mostrará una ventana con la ruta que intentó cargar y mensajes de depuración.
+- En Linux/macOS la carga del logo se realiza con GdkPixbuf (parte de GTK3) en el mismo lienzo proporcional (180×150), por lo que debe existir la librería `libgdk-pixbuf2.0` (suele venir con `libgtk-3-dev`).
+
+### Validación en múltiples plataformas
+- **Windows**: Compilado y validado con MinGW/MSYS2, usando GDI+ para renderizar el logo con calidad.
+- **Linux**: La rama GTK3 compila y ejecuta correctamente en Debian/Ubuntu. El logo se carga proporcional con GdkPixbuf.
+- **macOS**: La rama GTK3 compila y ejecuta con Homebrew. Mismo comportamiento que Linux.
+- Todos los controles de la UI (botones, campos de entrada, checkboxes) funcionan de manera consistente en las tres plataformas.
+- El procesamiento de imágenes y OpenMP funcionan sin cambios entre plataformas.
+
+El resto del funcionamiento (carpeta `img`, tiempo de ejecución, estadísticas) se mantiene igual: los archivos generados se guardan en `img/` junto al ejecutable y la UI muestra la ruta de salida y el tiempo transcurrido.
