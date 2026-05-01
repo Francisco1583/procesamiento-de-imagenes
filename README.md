@@ -288,3 +288,6 @@ gcc "interfaz_grafica.c" -o interfaz_grafica $(pkg-config --cflags --libs gtk+-3
 - El procesamiento de imágenes y OpenMP funcionan sin cambios entre plataformas.
 
 El resto del funcionamiento (carpeta `img`, tiempo de ejecución, estadísticas) se mantiene igual: los archivos generados se guardan en `img/` junto al ejecutable y la UI muestra la ruta de salida y el tiempo transcurrido.
+
+## 10. Video de demostración
+https://youtu.be/4u_XPX6RIZE
