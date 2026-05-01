@@ -269,6 +269,12 @@ static RunStats run_transformations(const ImageSelection *selection, const Trans
     return stats;
 }
 
+/* Logo rendering constants (shared between Windows and Linux/macOS) */
+#define LOGO_CANVAS_WIDTH 180
+#define LOGO_CANVAS_HEIGHT 150
+#define LOGO_RIGHT_MARGIN 28
+#define LOGO_BOTTOM_MARGIN 60
+
 #if defined(_WIN32)
 
 #define ID_BTN_ADD       101
@@ -287,11 +293,6 @@ static RunStats run_transformations(const ImageSelection *selection, const Trans
 #define ID_CHECK_BLUR_C  305
 #define ID_BTN_ABOUT     400
 #define ID_STATIC_LOGO   401
-
-#define LOGO_CANVAS_WIDTH 180
-#define LOGO_CANVAS_HEIGHT 150
-#define LOGO_RIGHT_MARGIN 28
-#define LOGO_BOTTOM_MARGIN 60
 
 static ImageSelection g_selection = {0};
 static HWND g_list_files = NULL;
@@ -931,7 +932,7 @@ static void on_execute_clicked(GtkButton *button, gpointer user_data) {
     RunStats stats = run_transformations(&g_app.selection, &config, g_app.output_directory);
     gtk_update_runtime_label(stats.elapsed_seconds);
 
-    char summary[512];
+    char summary[1024];
     snprintf(summary, sizeof(summary),
              "Processing completed in %.4f seconds.\n"
              "Generated files: %d/%d\n"
