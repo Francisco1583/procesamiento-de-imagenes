@@ -74,10 +74,31 @@ int main(int argc, char *argv[]) {
     unsigned char *headers[MAX_IMGS];
     unsigned char *pixels[MAX_IMGS];
     int offsets[MAX_IMGS], anchos[MAX_IMGS], altos[MAX_IMGS];
+    
+    // Arreglo para guardar el nombre original de la imagen (sin ruta y sin .bmp)
+    char nombres_base[MAX_IMGS][128];
 
-    // Cargar todas las imágenes en RAM secuencialmente
+    // Cargar todas las imágenes en RAM secuencialmente y extraer su nombre original
     for (int i = 0; i < num_imgs; i++) {
-        cargar_imagen(argv[10 + i], &headers[i], &offsets[i], &pixels[i], &anchos[i], &altos[i]);
+        const char *ruta_completa = argv[10 + i];
+        
+        // 1. Cargar datos a la RAM
+        cargar_imagen(ruta_completa, &headers[i], &offsets[i], &pixels[i], &anchos[i], &altos[i]);
+        
+        // 2. Extraer el nombre base (limpiar diagonales dependiendo si es Linux o Windows)
+        const char *slash = strrchr(ruta_completa, '/');
+        const char *backslash = strrchr(ruta_completa, '\\');
+        const char *inicio_nombre = ruta_completa;
+        
+        if (slash != NULL) inicio_nombre = slash + 1;
+        if (backslash != NULL && backslash > slash) inicio_nombre = backslash + 1;
+        
+        strncpy(nombres_base[i], inicio_nombre, 127);
+        nombres_base[i][127] = '\0'; // Asegurar fin de cadena
+        
+        // 3. Quitar el ".bmp"
+        char *punto = strrchr(nombres_base[i], '.');
+        if (punto != NULL) *punto = '\0';
     }
 
     omp_set_num_threads(NUM_THREADS);
@@ -93,8 +114,8 @@ int main(int argc, char *argv[]) {
                 if (f1) {
                     #pragma omp task firstprivate(i)
                     {
-                        char out_path[256];
-                        snprintf(out_path, sizeof(out_path), "%s/img_%d_1_vert_gris.bmp", ruta_salida, i + 1);
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_VG.bmp", ruta_salida, nombres_base[i]);
                         gray_img(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
                     }
                 }
@@ -102,8 +123,8 @@ int main(int argc, char *argv[]) {
                 if (f2) {
                     #pragma omp task firstprivate(i)
                     {
-                        char out_path[256];
-                        snprintf(out_path, sizeof(out_path), "%s/img_%d_2_vert_color.bmp", ruta_salida, i + 1);
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_VC.bmp", ruta_salida, nombres_base[i]);
                         inv_img_color(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
                     }
                 }
@@ -111,8 +132,8 @@ int main(int argc, char *argv[]) {
                 if (f3) {
                     #pragma omp task firstprivate(i)
                     {
-                        char out_path[256];
-                        snprintf(out_path, sizeof(out_path), "%s/img_%d_3_horiz_gris.bmp", ruta_salida, i + 1);
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_HG.bmp", ruta_salida, nombres_base[i]);
                         inv_img_grey_horizontal(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
                     }
                 }
@@ -120,8 +141,8 @@ int main(int argc, char *argv[]) {
                 if (f4) {
                     #pragma omp task firstprivate(i)
                     {
-                        char out_path[256];
-                        snprintf(out_path, sizeof(out_path), "%s/img_%d_4_horiz_color.bmp", ruta_salida, i + 1);
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_HC.bmp", ruta_salida, nombres_base[i]);
                         inv_img_color_horizontal(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
                     }
                 }
@@ -129,8 +150,8 @@ int main(int argc, char *argv[]) {
                 if (f5) {
                     #pragma omp task firstprivate(i)
                     {
-                        char out_path[256];
-                        snprintf(out_path, sizeof(out_path), "%s/img_%d_5_blur_gris.bmp", ruta_salida, i + 1);
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_DG.bmp", ruta_salida, nombres_base[i]);
                         desenfoque(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i], k_gris);
                     }
                 }
@@ -138,8 +159,8 @@ int main(int argc, char *argv[]) {
                 if (f6) {
                     #pragma omp task firstprivate(i)
                     {
-                        char out_path[256];
-                        snprintf(out_path, sizeof(out_path), "%s/img_%d_6_blur_color.bmp", ruta_salida, i + 1);
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_DC.bmp", ruta_salida, nombres_base[i]);
                         desenfoque_color(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i], k_color);
                     }
                 }
