@@ -1,363 +1,120 @@
 # Guía de Instalación y Uso
 
-## 🖥️ Requisitos previos
+## Requisitos previos
 
-### Windows (MinGW/MSYS2)
-- **Compilador:** GCC 9.0+ (con OpenMP)
-- **Librerías:** GDI+ (incluido en Windows)
-- **Herramientas:** MSYS2 o MinGW
+### Windows
+- Python 3.10 o superior.
+- PyQt5 instalado en el entorno de Python.
+- GCC con soporte para OpenMP.
+- MSYS2 o MinGW para compilar el backend.
 
 ### Linux
-- **Compilador:** GCC 7.0+ (con OpenMP)
-- **GTK3:** Development headers (`libgtk-3-dev`)
-- **GdkPixbuf:** Incluido con GTK3
+- Python 3.10 o superior.
+- PyQt5.
+- GCC con OpenMP.
 
 ### macOS
-- **Compilador:** GCC via Homebrew
-- **GTK3:** Via Homebrew
-- **Xcode Command Line Tools:** Recomendado
+- Python 3.10 o superior.
+- PyQt5.
+- GCC o Clang con OpenMP, según el toolchain disponible.
 
 ---
 
-## ⚙️ Instalación de dependencias
+## Instalación de dependencias
 
-### Windows (MSYS2)
+### Windows
 
-1. **Abrir MSYS2 MinGW 64-bit**
+```powershell
+python -m pip install PyQt5
+```
 
-2. **Actualizar repositorios:**
-   ```bash
-   pacman -Syu
-   ```
+### Linux y macOS
 
-3. **Instalar GCC y OpenMP:**
-   ```bash
-   pacman -S mingw-w64-x86_64-gcc
-   pacman -S mingw-w64-x86_64-omp
-   ```
+```bash
+python3 -m pip install PyQt5
+```
 
-4. **Verificar instalación:**
-   ```bash
-   gcc --version
-   gcc -Q --help=warning | grep fopenmp
-   ```
-
-**Nota:** GDI+ viene con Windows, no requiere instalación.
+Si tu sistema no tiene un compilador con OpenMP listo, instala el toolchain correspondiente antes de compilar `para_image_parra.c`.
 
 ---
 
-### Linux (Debian/Ubuntu)
+## Compilación del backend
 
-1. **Actualizar gestor de paquetes:**
-   ```bash
-   sudo apt update
-   ```
-
-2. **Instalar dependencias:**
-   ```bash
-   sudo apt install -y \
-     build-essential \
-     pkg-config \
-     libgtk-3-dev \
-     libgdk-pixbuf2.0-dev \
-     libomp-dev
-   ```
-
-3. **Verificar instalación:**
-   ```bash
-   gcc --version
-   pkg-config --modversion gtk+-3.0
-   ```
-
----
-
-### macOS (Homebrew)
-
-1. **Instalar Homebrew** (si no está):
-   ```bash
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   ```
-
-2. **Instalar GTK3:**
-   ```bash
-   brew install gtk+3
-   brew install pkg-config
-   brew install libomp
-   ```
-
-3. **Verificar instalación:**
-   ```bash
-   gcc --version
-   pkg-config --modversion gtk+-3.0
-   ```
-
----
-
-## 🔨 Compilación
-
-### Windows (Release - Sin consola)
+### Windows
 
 ```powershell
 cd "ruta\al\proyecto"
-
-gcc interfaz_grafica.c `
-  -o interfaz_grafica.exe `
-  -fopenmp `
-  -lgdiplus `
-  -lgdi32 `
-  -lcomdlg32 `
-  -lshell32 `
-  -mwindows
-
-# Ejecutar
-.\interfaz_grafica.exe
+gcc para_image_parra.c -o main.exe -fopenmp
 ```
 
-**Flags explicados:**
-- `-fopenmp`: Habilita paralelización OpenMP
-- `-lgdiplus`: GDI+ para renderizado de imágenes
-- `-lgdi32`: Gráficos de Windows
-- `-lcomdlg32`: Diálogos de archivo
-- `-lshell32`: Integración Shell
-- `-mwindows`: No abre consola
+### Linux y macOS
 
-### Windows (Debug - Con consola)
+```bash
+cd /ruta/al/proyecto
+gcc para_image_parra.c -o main -fopenmp
+```
+
+El ejecutable debe quedar en la misma carpeta que [Interfaz.py](../Interfaz.py).
+
+---
+
+## Ejecución
+
+### Windows
 
 ```powershell
-gcc interfaz_grafica.c `
-  -o interfaz_grafica_debug.exe `
-  -fopenmp `
-  -lgdiplus `
-  -lgdi32 `
-  -lcomdlg32 `
-  -lshell32 `
-  -g
-
-# Ejecutar (mostrará mensajes de depuración)
-.\interfaz_grafica_debug.exe
+python Interfaz.py
 ```
 
----
-
-### Linux
+### Linux y macOS
 
 ```bash
-cd /ruta/al/proyecto
-
-gcc interfaz_grafica.c \
-  -o interfaz_grafica \
-  -fopenmp \
-  $(pkg-config --cflags --libs gtk+-3.0)
-
-# Ejecutar
-./interfaz_grafica
+python3 Interfaz.py
 ```
+
+La interfaz:
+- permite arrastrar y soltar BMP,
+- admite hasta 10 imágenes,
+- guarda la salida en `resultados/`,
+- y lee el tiempo total del backend desde `TIEMPO_TOTAL`.
 
 ---
 
-### macOS
+## Uso rápido
 
-```bash
-cd /ruta/al/proyecto
-
-gcc interfaz_grafica.c \
-  -o interfaz_grafica \
-  -fopenmp \
-  $(pkg-config --cflags --libs gtk+-3.0)
-
-# Ejecutar
-./interfaz_grafica
-```
+1. Selecciona o arrastra imágenes BMP.
+2. Marca una o varias transformaciones.
+3. Ajusta los kernels si vas a usar blur.
+4. Ejecuta el procesamiento.
+5. Revisa los archivos generados en `resultados/`.
 
 ---
 
-## 🚀 Uso de la interfaz
+## Solución de problemas
 
-### 1. **Seleccionar imágenes**
+### No encuentra el ejecutable
 
-```
-Interfaz
-├── Botón "Add images..."
-│   └── Se abre diálogo de selección múltiple
-│       └── Seleccionar 1-10 archivos *.bmp
-└── Botón "Clear"
-    └── Vaciar lista de archivos
-```
+- Verifica que `main.exe` o `main` esté junto a `Interfaz.py`.
+- Confirma que la compilación no falló.
 
-**Límites:**
-- Máximo 10 imágenes simultáneamente
-- Solo formato BMP (`.bmp`)
-- Ruta completa se valida automáticamente
+### PyQt5 no está instalado
 
-### 2. **Seleccionar transformaciones**
+- Ejecuta `python -m pip install PyQt5` o `python3 -m pip install PyQt5`.
 
-| Checkbox | Descripción | Resultado |
-|---|---|---|
-| ✓ 1 - Vertical grayscale | Inversión vertical en B&W | `*_inv_gray.bmp` |
-| ✓ 2 - Vertical color | Inversión RGB vertical | `*_inv_color.bmp` |
-| ✓ 3 - Horizontal grayscale | Espejo horizontal B&W | `*_flip_gray.bmp` |
-| ✓ 4 - Horizontal color | Espejo horizontal RGB | `*_flip_color.bmp` |
-| ✓ 5 - Grayscale blur | Desenfoque B&W | `*_blur_gray.bmp` |
-| ✓ 6 - Color blur | Desenfoque RGB | `*_blur_color.bmp` |
+### No se generan archivos
 
-**Botones rápidos:**
-- **"All"**: Marca todas las transformaciones
-- **"Clear"**: Desmarca todas
+- Revisa que las imágenes sean BMP válidas.
+- Verifica que al menos una transformación esté marcada.
+- Confirma que la carpeta `resultados/` sea escribible.
 
-### 3. **Configurar parámetros**
+### El tiempo sale como error
 
-| Campo | Rango | Default | Notas |
-|---|---|---|---|
-| OpenMP threads | 1–64 | 18 | Recomendado: 6, 12 o 18 |
-| Kernel (grayscale) | Impar, 3+ | 27 | Debe ser número impar |
-| Kernel (color) | Impar, 3+ | 27 | Debe ser número impar |
-
-**Validación:**
-- Si kernel es par → Se suma 1 automáticamente
-- Si threads ≤ 0 → Se usa 18 por defecto
-- Si kernel < 3 → Se usa 27 por defecto
-
-### 4. **Ejecutar procesamiento**
-
-```
-Botón "Execute"
-    ↓
-Validar entrada
-    ↓
-Crear directorio img/
-    ↓
-Procesar todas las imágenes
-    ↓
-Mostrar diálogo de resultados
-    ├── Tiempo transcurrido (segundos)
-    ├── Archivos generados (N/total)
-    └── Archivos saltados
-```
-
-### 5. **Verificar resultados**
-
-Los archivos se guardan en: `img/` (relativo al ejecutable)
-
-```
-img/
-├── imagen1_inv_gray.bmp
-├── imagen1_inv_color.bmp
-├── imagen1_flip_gray.bmp
-├── imagen1_flip_color.bmp
-├── imagen1_blur_gray.bmp
-├── imagen1_blur_color.bmp
-├── imagen2_inv_gray.bmp
-├── imagen2_inv_color.bmp
-... (y así para cada imagen)
-```
+- Compila de nuevo el backend.
+- Asegúrate de que `main.exe`/`main` corresponda al sistema operativo actual.
 
 ---
 
-## 📋 Ejemplos de uso
-
-### Ejemplo 1: Conversión simple
-
-```
-1. Agregar: foto.bmp, retrato.bmp
-2. Marcar: ✓ 1 - Vertical grayscale
-3. Dejar: OpenMP threads = 18, Kernel = 27
-4. Ejecutar
-5. Resultado: foto_inv_gray.bmp, retrato_inv_gray.bmp
-```
-
-### Ejemplo 2: Procesamiento completo
-
-```
-1. Agregar: imagen1.bmp, imagen2.bmp, imagen3.bmp
-2. Marcar: Todos (botón "All")
-3. Configurar: threads = 18, kernel = 21
-4. Ejecutar
-5. Resultado: 18 archivos (3 imágenes × 6 transformaciones)
-```
-
-### Ejemplo 3: Ajuste fino para equipos lentos
-
-```
-1. Si tiempo > 30 segundos, probar:
-   - Reducir hilos a 12
-   - Reducir kernel a 15
-   - Procesar 2-3 imágenes en lugar de 10
-```
-
----
-
-## 🔍 Solución de problemas
-
-### El logo no aparece
-
-**Síntomas:** Área en blanco donde debería estar el logo
-
-**Causas y soluciones:**
-```
-❌ Archivo no encontrado:
-   ✓ Verificar que src/logo.bmp existe
-   ✓ Ejecutar desde carpeta del proyecto
-
-❌ Formato incorrecto:
-   ✓ Logo debe ser 24-bit BMP
-   ✓ Verificar: Windows → propiedades → 866×650 píxeles
-
-❌ En Windows, usar debug:
-   ./interfaz_grafica_debug.exe
-   └─ Mostrará ruta exacta que buscó
-```
-
-### Mensaje "Limit reached"
-
-```
-No puedo agregar más imágenes
-
-Solución: Máximo 10 imágenes permitidas
-✓ Agregar un segundo lote después de ejecutar
-```
-
-### Tiempo de ejecución muy alto
-
-```
-Si elapsed > 60 segundos:
-
-1. Verificar especificaciones (ver Conclusiones):
-   - ¿Laptop A? → Usar 2-3 imágenes máx
-   - ¿Laptop B? → Considerar como maestro
-
-2. Reducir paralelismo:
-   threads = 12 (en lugar de 18)
-
-3. Reducir kernel:
-   kernel = 15 (en lugar de 27)
-
-4. Monitorear temperatura:
-   - Windows: Task Manager → Performance
-   - Linux: watch -n 1 'sensors'
-   - macOS: sudo powermetrics
-```
-
-### Archivos no se generan
-
-```
-GeneratedFiles: 0/12
-
-Posibles causas:
-
-1. Permisos en directorio:
-   ls -la img/
-   chmod 755 img/
-
-2. Disco lleno:
-   df -h (Linux/macOS)
-   Get-PSDrive (Windows)
-
-3. Archivo de entrada corrupto:
-   file imagen.bmp
-   hexdump -C imagen.bmp | head
-```
-
----
+[[6-Arquitectura]] | [[Home]]
 
 ## 📊 Validación post-compilación
 
@@ -368,7 +125,7 @@ Posibles causas:
 # 2. Seleccionar solo esa imagen
 # 3. Marcar solo "Vertical grayscale"
 # 4. Ejecutar
-# 5. Verificar que archivo se creó en img/
+# 5. Verificar que archivo se creó en resultados/
 ```
 
 ### Test completo (5 minutos)

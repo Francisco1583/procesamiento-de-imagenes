@@ -1,7 +1,7 @@
 ---
 
-**Interfaz Gráfica de Procesamiento Paralelo de Imágenes BMP**
+**Procesamiento Paralelo de Imágenes BMP**
 
-Proyecto de investigación en paralelización de imágenes. | [Volver a Home](Home)
+UI en Python/PyQt5 y backend en C/OpenMP. | [Volver a Home](Home)
 
-*Última actualización: Abril 2026* | *Versión 1.0*
+*Última actualización: Mayo 2026* | *Versión 2.0*

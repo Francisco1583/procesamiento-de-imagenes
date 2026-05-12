@@ -1,73 +1,76 @@
-# Interfaz Gráfica de Procesamiento de Imágenes BMP
+# Procesamiento Paralelo de Imágenes BMP
 
-Bienvenido a la wiki del **Sistema de Procesamiento Paralelo de Imágenes BMP**. Este proyecto implementa una interfaz gráfica multiplataforma (Windows/Linux/macOS) que transforma imágenes BMP utilizando paralelización con OpenMP.
+Bienvenido a la wiki del **Sistema de Procesamiento Paralelo de Imágenes BMP**. La versión actual separa claramente la interfaz y el backend: la UI está hecha en **Python con PyQt5** y el procesamiento pesado permanece en **C/OpenMP**.
 
-## 🎯 Descripción rápida
+## Descripción rápida
 
-Este proyecto evalúa el rendimiento de transformaciones de imágenes en paralelo en tres dispositivos diferentes, identificando cuál es más eficiente para operar como nodo principal de una red de procesamiento distribuido.
+El usuario selecciona imágenes BMP desde la interfaz, define kernels y transformaciones, y luego la aplicación invoca el ejecutable del backend para generar los resultados en disco. La interfaz solo orquesta la ejecución; el trabajo intensivo ocurre en el backend optimizado.
 
 **Transformaciones disponibles:**
-- ✅ Inversión vertical (grayscale/color)
-- ✅ Flip horizontal (grayscale/color)  
-- ✅ Desenfoque/Blur configurable (grayscale/color)
-- ✅ Control de hilos OpenMP ajustable (6, 12, 18 o personalizado)
+- Inversión vertical en escala de grises
+- Inversión vertical a color
+- Inversión horizontal en escala de grises
+- Inversión horizontal a color
+- Desenfoque en escala de grises
+- Desenfoque a color
 
-## 📋 Tabla de Contenidos
+## Tabla de contenidos
 
 | Sección | Descripción |
 |---------|-------------|
-| [Objetivos](1-Objetivos) | Metas del experimento y preguntas de investigación |
-| [Contexto Experimental](2-Contexto-Experimental) | Hardware probado, programa y metodología |
-| [Resultados y Datos](3-Resultados-y-Datos) | Tabla consolidada de tiempos y hallazgos principales |
-| [Análisis Detallado](4-Análisis-Detallado) | Interpretación por dispositivo y factor OS |
-| [Conclusiones](5-Conclusiones) | Recomendaciones y selección de nodos |
-| [Arquitectura](6-Arquitectura) | Cómo funciona la UI y su conexión al backend |
-| [Guía de Instalación](7-Guía-Instalación) | Compilación y ejecución por plataforma |
+| [Objetivos](1-Objetivos) | Meta del experimento y preguntas de investigación |
+| [Contexto Experimental](2-Contexto-Experimental) | Hardware, programa actual y metodología |
+| [Resultados y Datos](3-Resultados-y-Datos) | Tiempos consolidados y lectura de resultados |
+| [Análisis Detallado](4-Análisis-Detallado) | Interpretación por dispositivo y sistema operativo |
+| [Conclusiones](5-Conclusiones) | Recomendaciones de nodos y configuración |
+| [Arquitectura](6-Arquitectura) | Flujo Python UI -> backend C |
+| [Guía de Instalación](7-Guía-Instalación) | Dependencias, compilación y uso |
 
-## 🚀 Inicio rápido
+## Inicio rápido
 
-### Compilar en Windows
+### Compilar el backend en Windows
 ```powershell
-gcc interfaz_grafica.c -o interfaz_grafica.exe -fopenmp -lgdiplus -lgdi32 -lcomdlg32 -lshell32 -mwindows
-./interfaz_grafica.exe
+gcc para_image_parra.c -o main.exe -fopenmp
+python -m pip install PyQt5
+python Interfaz.py
 ```
 
-### Compilar en Linux/macOS
+### Compilar el backend en Linux/macOS
 ```bash
-gcc interfaz_grafica.c -o interfaz_grafica $(pkg-config --cflags --libs gtk+-3.0) -fopenmp
-./interfaz_grafica
+gcc para_image_parra.c -o main -fopenmp
+python3 -m pip install PyQt5
+python3 Interfaz.py
 ```
 
-## 🔑 Conclusiones principales
+## Conclusiones principales
 
-- **Mejor desempeño:** Laptop B (Francisco) con **6.8342s a 18 hilos**
-- **Mejor escalabilidad:** Linux Bodhi supera Windows en eficiencia
-- **Configuración óptima:** 18 hilos paralelos en todos los equipos
-- **Recomendación:** Nodo maestro = Laptop B, Nodo secundario principal = Laptop C, Nodo de apoyo = Laptop A
+- Mejor desempeño: Laptop B (Francisco) con 6.8342s a 18 hilos.
+- Mejor escalabilidad: Linux Bodhi mostró la ejecución más estable.
+- Configuración óptima: 18 hilos sigue siendo el mejor balance en las pruebas.
+- Recomendación: Laptop B como nodo maestro, Laptop C como nodo secundario de alto rendimiento y Laptop A como apoyo.
 
-## 📁 Estructura del repositorio
+## Estructura del repositorio
 
 ```
 procesamiento-de-imagenes/
-├── interfaz_grafica.c          # GUI multiplataforma
-├── selec_proc.h                # Transformaciones backend (grayscale)
-├── selec_proc_1.h              # Transformaciones backend (color)
-├── src/
-│   └── logo.bmp                # Logo Tec de Monterrey (180×150)
-├── img/                        # Directorio de salida de resultados
-├── README.md                   # Documentación principal
+├── Interfaz.py                 # Interfaz gráfica en Python/PyQt5
+├── para_image_parra.c          # Orquestador del backend OpenMP
+├── selec_proc.h                # Transformaciones en gris y blur
+├── selec_proc_1.h              # Transformaciones horizontales y color
+├── resultados/                 # Salida generada por la interfaz
+├── src/                        # Recursos gráficos
+├── README.md                   # Documentación general
 └── wiki/                       # Esta wiki
 ```
 
-## 💡 Notas importantes
+## Notas importantes
 
-- El logo se renderiza en un lienzo de **180×150 píxeles** con escalado proporcional sin recortes
-- Los archivos de salida se guardan en el directorio `img/` relativo al ejecutable
-- OpenMP se configura dinámicamente desde la UI (por defecto 18 hilos)
-- Soporte para hasta **10 imágenes BMP** simultaneamente
-- Tiempo de ejecución medido con precisión mediante `omp_get_wtime()`
+- La interfaz resuelve rutas absolutas desde la carpeta del script para evitar errores por el directorio de trabajo.
+- El backend carga cada imagen una sola vez en memoria y escribe los resultados por filas para reducir I/O innecesario.
+- La interfaz acepta hasta 10 imágenes BMP simultáneamente.
+- El tiempo total se lee desde la salida estándar del ejecutable del backend.
 
 ---
 
-**Última actualización:** Abril 2026  
-**Versión:** 1.0 (Interfaz Gráfica Multiplataforma)
+**Última actualización:** Mayo 2026  
+**Versión:** 2.0 (UI en Python + backend C/OpenMP)
