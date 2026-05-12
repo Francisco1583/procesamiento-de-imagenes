@@ -231,11 +231,15 @@ class AppProcesamiento(QWidget):
     def mostrar_acerca_de(self):
         dlg = QMessageBox(self)
         dlg.setWindowTitle("Acerca de")
-        dlg.setText("<b>Proyecto de Procesamiento de Imágenes Paralelo</b><br><br>"
-                    "Desarrollado para optimizar tiempos de ejecución utilizando OpenMP y C.<br>"
-                    "Maneja imágenes .bmp y aplica filtros a nivel de bits.<br><br>"
-                    "<i>Desarrollado por: Emmanuel Torres Rios</i>")
-        dlg.setStyleSheet("QLabel { color: #000; } QPushButton { background-color: #ddd; color: #000; }")
+        dlg.setText("<b>TC3003</b><br><br>"
+                    "Tecnologico de monterrey Campus puebla<br>"
+                    "Mayo 2026<br><br>"
+                    "<i>Equipo:</i>"
+                    "<ul>"
+                    "<li>Francisco Antonio Lopez Ricardez</li>"
+                    "<li>Alejandro Santana Moreno</li>"
+                    "<li>Yahel Alejandro Jiménez Fernández </li>")
+        dlg.setStyleSheet("QLabel { color: white; } QPushButton { background-color: #ddd; color: #000; }")
         dlg.exec_()
 
     def ejecutar_procesamiento(self):
