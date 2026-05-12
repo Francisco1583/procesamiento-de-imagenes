@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) {
                     {
                         char out_path[512];
                         snprintf(out_path, sizeof(out_path), "%s/%s_VG.bmp", ruta_salida, nombres_base[i]);
-                        gray_img(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
+                        inv_img(out_path, headers[i], offsets[i], pixels[i], anchos[i], altos[i]);
                     }
                 }
 
