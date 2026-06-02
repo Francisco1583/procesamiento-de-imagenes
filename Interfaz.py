@@ -3,7 +3,7 @@ import os
 import subprocess
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QPushButton, QCheckBox, QLineEdit, 
-                             QFileDialog, QMessageBox, QGridLayout)
+                             QFileDialog, QMessageBox, QGridLayout, QTextEdit)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QIntValidator
 
@@ -113,7 +113,13 @@ class AppProcesamiento(QWidget):
         col_izq.addWidget(self.lbl_ruta)
         col_izq.addWidget(self.txt_ruta)
         
-        col_izq.addStretch()
+        col_izq.addSpacing(10)
+        self.lbl_consola = QLabel("Monitor del Clúster (Salida MPI):")
+        self.consola = QTextEdit()
+        self.consola.setReadOnly(True)
+        self.consola.setStyleSheet("background-color: #0c0c0c; color: #00ff00; font-family: monospace; border: 1px solid #555;")
+        col_izq.addWidget(self.lbl_consola)
+        col_izq.addWidget(self.consola)
 
         # ----- COLUMNA DERECHA -----
         col_der = QVBoxLayout()
@@ -282,12 +288,17 @@ class AppProcesamiento(QWidget):
             # Ejecutar el backend en C
             resultado = subprocess.run(comando, capture_output=True, text=True)
             
+            # === NUEVO: Mostrar la salida en la consola de la interfaz ===
+            self.consola.setText(resultado.stdout)
+            if resultado.stderr:
+                self.consola.append("\n[ERRORES DEL SISTEMA]:\n" + resultado.stderr)
+            
             if resultado.returncode != 0:
-                QMessageBox.critical(self, "Error del Sistema", f"El programa en C falló.\n{resultado.stderr}")
+                QMessageBox.critical(self, "Error del Sistema", "El programa en C falló. Revisa el monitor del clúster.")
                 self.txt_tiempo.setText("Error")
                 return
 
-            # Extraer el tiempo de la salida de texto (stdout)
+            # Extraer el tiempo de la salida de texto
             salida = resultado.stdout
             tiempo = "Desconocido"
             for linea in salida.split('\n'):
