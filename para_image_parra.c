@@ -86,9 +86,14 @@ int main(int argc, char *argv[]) {
         char *punto = strrchr(nombre_base, '.');
         if (punto != NULL) *punto = '\0';
 
-        printf("[Nodo %d del Clúster] Procesando la imagen: %s\n", my_rank, nombre_base);
-        fflush(stdout); // Forza a MPI a enviar el texto inmediatamente
-        // --------------------------------------
+        // ---- REPORTE DE ACTIVIDAD MEJORADO ----
+        char processor_name[MPI_MAX_PROCESSOR_NAME];
+        int name_len;
+        MPI_Get_processor_name(processor_name, &name_len);
+        
+        printf("[Rank %d en %s] Procesando la imagen: %s\n", my_rank, processor_name, nombre_base);
+        fflush(stdout); 
+        // ----------------------------------------
 
         // Procesamiento local con OpenMP
         #pragma omp parallel
