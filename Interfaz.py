@@ -267,12 +267,17 @@ class AppProcesamiento(QWidget):
         self.txt_tiempo.setText("Procesando...")
         QApplication.processEvents() # Fuerza a la interfaz a actualizar el texto
 
-        # 4. RUTA ABSOLUTA PARA EL EJECUTABLE EN C (Cross-platform)
-        nombre_ejecutable = "main.exe" if os.name == 'nt' else "main"
-        ruta_ejecutable = os.path.join(self.directorio_base, nombre_ejecutable)
+        # 4. RUTAS ABSOLUTAS PARA EL CLÚSTER MPI
+        ruta_ejecutable = os.path.join(self.directorio_base, "main_mpi")
+        ruta_hosts = os.path.join(self.directorio_base, "hosts_mpi")
         
-        comando = [ruta_ejecutable, self.ruta_salida, k_gris, k_color, f1, f2, f3, f4, f5, f6] + archivos
-
+        # Construcción dinámica del comando mpirun
+        comando = [
+            "mpirun", "-f", ruta_hosts, "-np", "3", 
+            ruta_ejecutable, self.ruta_salida, 
+            k_gris, k_color, f1, f2, f3, f4, f5, f6
+        ] + archivos
+        
         try:
             # Ejecutar el backend en C
             resultado = subprocess.run(comando, capture_output=True, text=True)
