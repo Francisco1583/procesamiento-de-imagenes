@@ -4,6 +4,7 @@
 #include <omp.h>
 #include "selec_proc.h"
 #include "selec_proc_1.h"
+#include <mpi.h>
 
 #define NUM_THREADS 18
 #define MAX_IMGS 10
