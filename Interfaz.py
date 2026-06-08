@@ -3,7 +3,7 @@ import os
 import subprocess
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QPushButton, QCheckBox, QLineEdit, 
-                             QFileDialog, QMessageBox, QGridLayout, QTextEdit)
+                             QFileDialog, QMessageBox, QGridLayout, QTextEdit, QProgressBar)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QIntValidator
 
@@ -72,13 +72,10 @@ class AppProcesamiento(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Procesamiento de Imágenes")
-        self.resize(650, 400)
+        self.resize(700, 500)
         self.setStyleSheet("background-color: #1e1e1e; color: #eeeeee; font-family: Arial;")
         
-        # 1. OBTENER EL DIRECTORIO REAL DEL SCRIPT (Ignora dónde esté la terminal)
         self.directorio_base = os.path.dirname(os.path.abspath(__file__))
-        
-        # 2. CREAR LA RUTA DE RESULTADOS BASADA EN EL DIRECTORIO DEL SCRIPT
         self.ruta_salida = os.path.join(self.directorio_base, "resultados")
         if not os.path.exists(self.ruta_salida):
             os.makedirs(self.ruta_salida)
@@ -94,7 +91,21 @@ class AppProcesamiento(QWidget):
         self.drop_zone = DropZone()
         col_izq.addWidget(self.drop_zone)
         
-        col_izq.addSpacing(20)
+        col_izq.addSpacing(15)
+        
+        # Barra de progreso
+        self.lbl_progreso = QLabel("Progreso del Clúster:")
+        self.barra_progreso = QProgressBar()
+        self.barra_progreso.setRange(0, 100)
+        self.barra_progreso.setValue(0)
+        self.barra_progreso.setStyleSheet("""
+            QProgressBar { border: 1px solid #555; border-radius: 5px; text-align: center; color: white; font-weight: bold; }
+            QProgressBar::chunk { background-color: #4CAF50; border-radius: 4px; }
+        """)
+        col_izq.addWidget(self.lbl_progreso)
+        col_izq.addWidget(self.barra_progreso)
+        
+        col_izq.addSpacing(15)
         
         self.lbl_tiempo = QLabel("Tiempo de ejecución:")
         self.txt_tiempo = QLineEdit()
@@ -106,7 +117,6 @@ class AppProcesamiento(QWidget):
         col_izq.addSpacing(10)
         
         self.lbl_ruta = QLabel("Ruta de archivos (Resultados):")
-        # Mostrar la ruta absoluta de salida
         self.txt_ruta = QLineEdit(self.ruta_salida)
         self.txt_ruta.setReadOnly(True)
         self.txt_ruta.setStyleSheet("background-color: #333; border: 1px solid #555; padding: 5px; font-size: 11px;")
@@ -135,12 +145,11 @@ class AppProcesamiento(QWidget):
             chk.setStyleSheet(estilo_check)
             col_der.addWidget(chk)
 
-        # Contenedor para Desenfoque Gris
         lay_blur_gris = QHBoxLayout()
         self.chk5 = QCheckBox("5- Desenfoque escala de grises")
         self.chk5.setStyleSheet(estilo_check)
         self.txt_k_gris = QLineEdit("27")
-        self.txt_k_gris.setValidator(QIntValidator(1, 999)) # Solo enteros
+        self.txt_k_gris.setValidator(QIntValidator(1, 999))
         self.txt_k_gris.setFixedWidth(50)
         self.txt_k_gris.setStyleSheet("background-color: #333; border: 1px solid #555;")
         lay_blur_gris.addWidget(self.chk5)
@@ -149,7 +158,6 @@ class AppProcesamiento(QWidget):
         lay_blur_gris.addStretch()
         col_der.addLayout(lay_blur_gris)
 
-        # Contenedor para Desenfoque Color
         lay_blur_color = QHBoxLayout()
         self.chk6 = QCheckBox("6- Desenfoque escala a colores")
         self.chk6.setStyleSheet(estilo_check)
@@ -165,7 +173,6 @@ class AppProcesamiento(QWidget):
 
         col_der.addSpacing(15)
 
-        # Botón "Todas"
         lay_todas = QHBoxLayout()
         self.btn_todas = QPushButton("Todas")
         self.btn_todas.setFixedWidth(100)
@@ -180,7 +187,6 @@ class AppProcesamiento(QWidget):
 
         col_der.addStretch()
 
-        # Botones Inferiores y Logo
         lay_bottom = QHBoxLayout()
         
         self.btn_ejecutar = QPushButton("Ejecutar")
@@ -193,7 +199,6 @@ class AppProcesamiento(QWidget):
         self.btn_acerca.setStyleSheet("QPushButton { background-color: #007BFF; border-radius: 10px; } QPushButton:hover { background-color: #0056b3; }")
         self.btn_acerca.clicked.connect(self.mostrar_acerca_de)
 
-        # 3. RUTA ABSOLUTA PARA EL LOGO
         self.lbl_logo = QLabel("LOGO TEC")
         self.lbl_logo.setAlignment(Qt.AlignCenter)
         self.lbl_logo.setFixedSize(60, 60)
@@ -212,17 +217,14 @@ class AppProcesamiento(QWidget):
 
         col_der.addLayout(lay_bottom)
 
-        # Ensamblar columnas
         layout_principal.addLayout(col_izq, 1)
         layout_principal.addSpacing(30)
         layout_principal.addLayout(col_der, 2)
         
         self.setLayout(layout_principal)
 
-    # ================= FUNCIONES LÓGICAS =================
     def seleccionar_todas(self):
         estado = True
-        # Si todas están marcadas, las desmarca para ser más intuitivo
         if (self.chk1.isChecked() and self.chk2.isChecked() and self.chk3.isChecked() and 
             self.chk4.isChecked() and self.chk5.isChecked() and self.chk6.isChecked()):
             estado = False
@@ -242,7 +244,7 @@ class AppProcesamiento(QWidget):
                     "Mayo 2026<br><br>"
                     "<i>Equipo:</i>"
                     "<ul>"
-                    "<li>Francisco Antonio Lopez Ricardez</li>"
+                    "<li>Yahel Antonio Lopez Ricardez</li>"
                     "<li>Alejandro Santana Moreno</li>"
                     "<li>Yahel Alejandro Jiménez Fernández </li>")
         dlg.setStyleSheet("QLabel { color: white; } QPushButton { background-color: #ddd; color: #000; }")
@@ -254,11 +256,9 @@ class AppProcesamiento(QWidget):
             QMessageBox.warning(self, "Atención", "No has cargado ninguna imagen.")
             return
 
-        # Obtener valores
         k_gris = self.txt_k_gris.text() or "27"
         k_color = self.txt_k_color.text() or "27"
         
-        # Banderas (1 si está seleccionado, 0 si no)
         f1 = "1" if self.chk1.isChecked() else "0"
         f2 = "1" if self.chk2.isChecked() else "0"
         f3 = "1" if self.chk3.isChecked() else "0"
@@ -270,14 +270,17 @@ class AppProcesamiento(QWidget):
             QMessageBox.warning(self, "Atención", "Selecciona al menos una transformación.")
             return
 
+        # Calcular tareas para la barra de progreso
+        total_tareas = len(archivos)
+        tareas_completadas = 0
+        self.barra_progreso.setValue(0)
         self.txt_tiempo.setText("Procesando...")
-        QApplication.processEvents() # Fuerza a la interfaz a actualizar el texto
+        self.consola.clear()
+        QApplication.processEvents()
 
-        # 4. RUTAS ABSOLUTAS PARA EL CLÚSTER MPI
         ruta_ejecutable = os.path.join(self.directorio_base, "main_mpi")
         ruta_hosts = os.path.join(self.directorio_base, "hosts_mpi")
         
-        # Construcción dinámica del comando mpirun
         comando = [
             "mpirun", "-f", ruta_hosts, "-np", "3", 
             ruta_ejecutable, self.ruta_salida, 
@@ -285,27 +288,41 @@ class AppProcesamiento(QWidget):
         ] + archivos
         
         try:
-            # Ejecutar el backend en C
-            resultado = subprocess.run(comando, capture_output=True, text=True)
+            # Ejecución asíncrona para actualizar la barra y la consola en tiempo real
+            proceso = subprocess.Popen(comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
-            # === NUEVO: Mostrar la salida en la consola de la interfaz ===
-            self.consola.setText(resultado.stdout)
-            if resultado.stderr:
-                self.consola.append("\n[ERRORES DEL SISTEMA]:\n" + resultado.stderr)
+            tiempo_total = "Desconocido"
             
-            if resultado.returncode != 0:
+            # Leer la salida línea por línea mientras se ejecuta
+            while True:
+                linea = proceso.stdout.readline()
+                if not linea and proceso.poll() is not None:
+                    break
+                if linea:
+                    self.consola.append(linea.strip())
+                    
+                    # Detectar avance de tareas
+                    if "Procesando la imagen" in linea:
+                        tareas_completadas += 1
+                        porcentaje = int((tareas_completadas / total_tareas) * 100)
+                        self.barra_progreso.setValue(min(porcentaje, 100))
+                    
+                    if "TIEMPO_TOTAL:" in linea:
+                        tiempo_total = linea.split(":")[1].strip() + " segundos"
+                        
+                    QApplication.processEvents() # Previene que la ventana se congele
+
+            errores = proceso.stderr.read()
+            if errores:
+                self.consola.append("\n[ERRORES DEL SISTEMA]:\n" + errores)
+            
+            if proceso.returncode != 0:
                 QMessageBox.critical(self, "Error del Sistema", "El programa en C falló. Revisa el monitor del clúster.")
                 self.txt_tiempo.setText("Error")
                 return
 
-            # Extraer el tiempo de la salida de texto
-            salida = resultado.stdout
-            tiempo = "Desconocido"
-            for linea in salida.split('\n'):
-                if "TIEMPO_TOTAL:" in linea:
-                    tiempo = linea.split(":")[1].strip() + " segundos"
-            
-            self.txt_tiempo.setText(tiempo)
+            self.txt_tiempo.setText(tiempo_total)
+            self.barra_progreso.setValue(100)
             
         except FileNotFoundError:
             QMessageBox.critical(self, "Ejecutable no encontrado", 

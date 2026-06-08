@@ -154,6 +154,28 @@ int main(int argc, char *argv[]) {
         free(pixels);
     }
 
+    // ====================================================================
+    // GENERACIÓN DE LOGS DISTRIBUIDOS 
+    // ====================================================================
+    char log_filename[256];
+    snprintf(log_filename, sizeof(log_filename), "%s/rank_%d.log", ruta_salida, my_rank);
+    
+    FILE *log_file = fopen(log_filename, "w");
+    if (log_file != NULL) {
+        char processor_name[MPI_MAX_PROCESSOR_NAME];
+        int name_len;
+        MPI_Get_processor_name(processor_name, &name_len);
+
+        fprintf(log_file, "====== MPI RANK %d | HOST: %s ======\n", my_rank, processor_name);
+        fprintf(log_file, "Procesos MPI totales:   %d\n", num_procs);
+        fprintf(log_file, "Threads OpenMP:         %d\n", omp_get_max_threads());
+        fprintf(log_file, "--------------------------------------------------\n");
+        fprintf(log_file, "Directorio procesado: %s\n", ruta_salida);
+        fprintf(log_file, "==================================================\n");
+        fclose(log_file);
+    }
+    // ====================================================================
+
     // Esperar a que todos terminen para calcular el tiempo total
     MPI_Barrier(MPI_COMM_WORLD);
     double tiempo_final = MPI_Wtime();
