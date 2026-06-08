@@ -39,10 +39,10 @@ class DropZone(QLabel):
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if path.lower().endswith('.bmp'):
-                if len(self.archivos) < 10 and path not in self.archivos:
+                if len(self.archivos) < 600 and path not in self.archivos:
                     self.archivos.append(path)
-                elif len(self.archivos) >= 10:
-                    QMessageBox.warning(self, "Límite", "Solo puedes procesar hasta 10 imágenes a la vez.")
+                elif len(self.archivos) >= 600:
+                    QMessageBox.warning(self, "Límite", "Solo puedes procesar hasta 600 imágenes a la vez.")
                     break
         self.actualizar_texto()
 
@@ -244,7 +244,7 @@ class AppProcesamiento(QWidget):
                     "Mayo 2026<br><br>"
                     "<i>Equipo:</i>"
                     "<ul>"
-                    "<li>Yahel Antonio Lopez Ricardez</li>"
+                    "<li>Francisco Antonio Lopez Ricardez</li>"
                     "<li>Alejandro Santana Moreno</li>"
                     "<li>Yahel Alejandro Jiménez Fernández </li>")
         dlg.setStyleSheet("QLabel { color: white; } QPushButton { background-color: #ddd; color: #000; }")
@@ -282,7 +282,7 @@ class AppProcesamiento(QWidget):
         ruta_hosts = os.path.join(self.directorio_base, "hosts_mpi")
         
         comando = [
-            "mpirun", "-f", ruta_hosts, "-np", "6", 
+            "mpirun", "-f", ruta_hosts, "-np", "4", 
             ruta_ejecutable, self.ruta_salida, 
             k_gris, k_color, f1, f2, f3, f4, f5, f6
         ] + archivos
