@@ -282,7 +282,7 @@ class AppProcesamiento(QWidget):
         ruta_hosts = os.path.join(self.directorio_base, "hosts_mpi")
         
         comando = [
-            "mpirun", "-f", ruta_hosts, "-np", "3", 
+            "mpirun", "-f", ruta_hosts, "-np", "2", 
             ruta_ejecutable, self.ruta_salida, 
             k_gris, k_color, f1, f2, f3, f4, f5, f6
         ] + archivos
