@@ -1,21 +1,13 @@
-#include <mpi.h>
-#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <omp.h>
 #include "selec_proc.h"
 #include "selec_proc_1.h"
+#include <mpi.h>
 
-#define MAX_IMGS 600
-
-// Estructura para almacenar los detalles temporales de cada tarea (para el log)
-typedef struct {
-    char nombre_img[128];
-    char transformacion[32];
-    long long pixeles;
-    double tiempo;
-    char archivo_salida[256];
-} LogDetail;
+#define NUM_THREADS 18
+#define MAX_IMGS 10
 
 // Función auxiliar para leer la imagen en RAM una sola vez con validaciones
 void cargar_imagen(const char* path, unsigned char** header, int* offset, unsigned char** pixels, int* ancho, int* alto) {
@@ -45,6 +37,17 @@ void cargar_imagen(const char* path, unsigned char** header, int* offset, unsign
     fclose(in);
 }
 
+// Estructura para almacenar los detalles temporales de cada tarea (para el log)
+typedef struct {
+    char nombre_img[128];
+    char transformacion[32];
+    long long pixeles;
+    double tiempo;
+    char archivo_salida[256];
+} LogDetail;
+
+// Estructura esperada de argumentos CLI enviados por la interfaz gráfica:
+// ./main [ruta_salida] [kernel_gris] [kernel_color] [f1] [f2] [f3] [f4] [f5] [f6] [img1] [img2] ... [img10]
 int main(int argc, char *argv[]) {
     int my_rank, num_procs;
     
@@ -68,12 +71,14 @@ int main(int argc, char *argv[]) {
     int num_imgs = argc - 10;
     if (num_imgs > MAX_IMGS) num_imgs = MAX_IMGS;
 
+    omp_set_num_threads(NUM_THREADS);
+
     // Variables maestras para el registro de logs
-    LogDetail detalles[MAX_IMGS * 6]; 
+    LogDetail detalles[MAX_IMGS * 150]; // Capacidad para 6 transformaciones por imagen
     int num_detalles = 0;
     long long pixeles_totales = 0;
     
-    // Obtener nombre del host para la trazabilidad
+    // Obtener nombre del host
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
@@ -82,258 +87,213 @@ int main(int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     double tiempo_inicio = MPI_Wtime();
 
-    // Etiquetas para el paso de mensajes (Master-Worker)
-    int WORK_TAG = 1;
-    int DATA_TAG = 2;
-    int END_TAG = 3;
+    // Distribución de carga: Cada nodo procesa (i % num_procs == my_rank)
+    for (int i = my_rank; i < num_imgs; i += num_procs) {
+        const char *ruta_completa = argv[10 + i];
+        unsigned char *header;
+        unsigned char *pixels;
+        int offset, ancho, alto;
 
-    if (my_rank == 0) {
-        // =========================================================
-        // NODO 0: EL DESPACHADOR (JEFE) - Solo reparte trabajo
-        // =========================================================
-        int imagenes_despachadas = 0;
-        int trabajadores_activos = num_procs - 1;
+        // Extraer el nombre base para reporte y logs
+        char nombre_base[128];
+        const char *slash = strrchr(ruta_completa, '/');
+        const char *inicio_nombre = (slash != NULL) ? slash + 1 : ruta_completa;
+        strncpy(nombre_base, inicio_nombre, 127);
+        nombre_base[127] = '\0';
+        char *punto = strrchr(nombre_base, '.');
+        if (punto != NULL) *punto = '\0';
 
-        while (trabajadores_activos > 0) {
-            int peticion;
-            MPI_Status status;
-            
-            // Escucha a cualquier trabajador que esté libre y pida trabajo
-            MPI_Recv(&peticion, 1, MPI_INT, MPI_ANY_SOURCE, WORK_TAG, MPI_COMM_WORLD, &status);
-            int worker_id = status.MPI_SOURCE;
+        // Imprimir para que lo lea la consola de Python
+        printf("[Rank %d en %s] Procesando la imagen: %s\n", my_rank, processor_name, nombre_base);
+        fflush(stdout);
 
-            if (imagenes_despachadas < num_imgs) {
-                // Hay trabajo: Enviar el índice de la siguiente imagen
-                MPI_Send(&imagenes_despachadas, 1, MPI_INT, worker_id, DATA_TAG, MPI_COMM_WORLD);
-                imagenes_despachadas++;
-            } else {
-                // No hay trabajo: Enviar señal de terminación (-1)
-                int fin = -1;
-                MPI_Send(&fin, 1, MPI_INT, worker_id, END_TAG, MPI_COMM_WORLD);
-                trabajadores_activos--;
-            }
-        }
-    } else {
-        // =========================================================
-        // NODOS > 0: TRABAJADORES - Piden y procesan imágenes
-        // =========================================================
-        while (1) {
-            int peticion = 1;
-            
-            // Avisar al Master que estoy libre
-            MPI_Send(&peticion, 1, MPI_INT, 0, WORK_TAG, MPI_COMM_WORLD);
+        // Carga en RAM
+        cargar_imagen(ruta_completa, &header, &offset, &pixels, &ancho, &alto);
+        long long pixeles_imagen = (long long)ancho * alto;
 
-            int img_idx;
-            MPI_Status status;
-            
-            // Recibir la imagen asignada
-            MPI_Recv(&img_idx, 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-
-            if (status.MPI_TAG == END_TAG) {
-                break; // Ya no hay imágenes, el trabajador puede descansar
-            }
-
-            // --- PROCESAMIENTO DE LA IMAGEN ASIGNADA ---
-            const char *ruta_completa = argv[10 + img_idx];
-            unsigned char *header;
-            unsigned char *pixels;
-            int offset, ancho, alto;
-
-            // Extraer el nombre base
-            char nombre_base[128];
-            const char *slash = strrchr(ruta_completa, '/');
-            const char *inicio_nombre = (slash != NULL) ? slash + 1 : ruta_completa;
-            strncpy(nombre_base, inicio_nombre, 127);
-            nombre_base[127] = '\0';
-            char *punto = strrchr(nombre_base, '.');
-            if (punto != NULL) *punto = '\0';
-
-            printf("[Rank %d en %s] Procesando la imagen: %s\n", my_rank, processor_name, nombre_base);
-            fflush(stdout);
-
-            cargar_imagen(ruta_completa, &header, &offset, &pixels, &ancho, &alto);
-            long long pixeles_imagen = (long long)ancho * alto;
-
-            // OpenMP usará automáticamente todos los núcleos físicos de la laptop donde esté corriendo
-            #pragma omp parallel
+        // Procesamiento local con OpenMP
+        #pragma omp parallel
+        {
+            #pragma omp single
             {
-                #pragma omp single
-                {
-                    if (f1) {
-                        #pragma omp task
-                        {
-                            double t_ini = omp_get_wtime();
-                            char out_path[512];
-                            snprintf(out_path, sizeof(out_path), "%s/%s_VG.bmp", ruta_salida, nombre_base);
-                            gray_img(out_path, header, offset, pixels, ancho, alto);
-                            double t_fin = omp_get_wtime();
+                if (f1) {
+                    #pragma omp task
+                    {
+                        double t_ini = omp_get_wtime();
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_VG.bmp", ruta_salida, nombre_base);
+                        gray_img(out_path, header, offset, pixels, ancho, alto);
+                        double t_fin = omp_get_wtime();
 
-                            #pragma omp critical
-                            {
-                                strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
-                                strcpy(detalles[num_detalles].transformacion, "gris_vertical");
-                                detalles[num_detalles].pixeles = pixeles_imagen;
-                                detalles[num_detalles].tiempo = t_fin - t_ini;
-                                strcpy(detalles[num_detalles].archivo_salida, out_path);
-                                pixeles_totales += pixeles_imagen;
-                                num_detalles++;
-                            }
+                        // Guardar datos de manera segura mediante región crítica
+                        #pragma omp critical
+                        {
+                            strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
+                            strcpy(detalles[num_detalles].transformacion, "gris_vertical");
+                            detalles[num_detalles].pixeles = pixeles_imagen;
+                            detalles[num_detalles].tiempo = t_fin - t_ini;
+                            strcpy(detalles[num_detalles].archivo_salida, out_path);
+                            pixeles_totales += pixeles_imagen;
+                            num_detalles++;
                         }
                     }
-                    if (f2) {
-                        #pragma omp task
-                        {
-                            double t_ini = omp_get_wtime();
-                            char out_path[512];
-                            snprintf(out_path, sizeof(out_path), "%s/%s_VC.bmp", ruta_salida, nombre_base);
-                            inv_img_color(out_path, header, offset, pixels, ancho, alto);
-                            double t_fin = omp_get_wtime();
+                }
+                if (f2) {
+                    #pragma omp task
+                    {
+                        double t_ini = omp_get_wtime();
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_VC.bmp", ruta_salida, nombre_base);
+                        inv_img_color(out_path, header, offset, pixels, ancho, alto);
+                        double t_fin = omp_get_wtime();
 
-                            #pragma omp critical
-                            {
-                                strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
-                                strcpy(detalles[num_detalles].transformacion, "color_vertical");
-                                detalles[num_detalles].pixeles = pixeles_imagen;
-                                detalles[num_detalles].tiempo = t_fin - t_ini;
-                                strcpy(detalles[num_detalles].archivo_salida, out_path);
-                                pixeles_totales += pixeles_imagen;
-                                num_detalles++;
-                            }
+                        #pragma omp critical
+                        {
+                            strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
+                            strcpy(detalles[num_detalles].transformacion, "color_vertical");
+                            detalles[num_detalles].pixeles = pixeles_imagen;
+                            detalles[num_detalles].tiempo = t_fin - t_ini;
+                            strcpy(detalles[num_detalles].archivo_salida, out_path);
+                            pixeles_totales += pixeles_imagen;
+                            num_detalles++;
                         }
                     }
-                    if (f3) {
-                        #pragma omp task
-                        {
-                            double t_ini = omp_get_wtime();
-                            char out_path[512];
-                            snprintf(out_path, sizeof(out_path), "%s/%s_HG.bmp", ruta_salida, nombre_base);
-                            inv_img_grey_horizontal(out_path, header, offset, pixels, ancho, alto);
-                            double t_fin = omp_get_wtime();
+                }
+                if (f3) {
+                    #pragma omp task
+                    {
+                        double t_ini = omp_get_wtime();
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_HG.bmp", ruta_salida, nombre_base);
+                        inv_img_grey_horizontal(out_path, header, offset, pixels, ancho, alto);
+                        double t_fin = omp_get_wtime();
 
-                            #pragma omp critical
-                            {
-                                strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
-                                strcpy(detalles[num_detalles].transformacion, "gris_horizontal");
-                                detalles[num_detalles].pixeles = pixeles_imagen;
-                                detalles[num_detalles].tiempo = t_fin - t_ini;
-                                strcpy(detalles[num_detalles].archivo_salida, out_path);
-                                pixeles_totales += pixeles_imagen;
-                                num_detalles++;
-                            }
+                        #pragma omp critical
+                        {
+                            strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
+                            strcpy(detalles[num_detalles].transformacion, "gris_horizontal");
+                            detalles[num_detalles].pixeles = pixeles_imagen;
+                            detalles[num_detalles].tiempo = t_fin - t_ini;
+                            strcpy(detalles[num_detalles].archivo_salida, out_path);
+                            pixeles_totales += pixeles_imagen;
+                            num_detalles++;
                         }
                     }
-                    if (f4) {
-                        #pragma omp task
-                        {
-                            double t_ini = omp_get_wtime();
-                            char out_path[512];
-                            snprintf(out_path, sizeof(out_path), "%s/%s_HC.bmp", ruta_salida, nombre_base);
-                            inv_img_color_horizontal(out_path, header, offset, pixels, ancho, alto);
-                            double t_fin = omp_get_wtime();
+                }
+                if (f4) {
+                    #pragma omp task
+                    {
+                        double t_ini = omp_get_wtime();
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_HC.bmp", ruta_salida, nombre_base);
+                        inv_img_color_horizontal(out_path, header, offset, pixels, ancho, alto);
+                        double t_fin = omp_get_wtime();
 
-                            #pragma omp critical
-                            {
-                                strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
-                                strcpy(detalles[num_detalles].transformacion, "color_horizontal");
-                                detalles[num_detalles].pixeles = pixeles_imagen;
-                                detalles[num_detalles].tiempo = t_fin - t_ini;
-                                strcpy(detalles[num_detalles].archivo_salida, out_path);
-                                pixeles_totales += pixeles_imagen;
-                                num_detalles++;
-                            }
+                        #pragma omp critical
+                        {
+                            strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
+                            strcpy(detalles[num_detalles].transformacion, "color_horizontal");
+                            detalles[num_detalles].pixeles = pixeles_imagen;
+                            detalles[num_detalles].tiempo = t_fin - t_ini;
+                            strcpy(detalles[num_detalles].archivo_salida, out_path);
+                            pixeles_totales += pixeles_imagen;
+                            num_detalles++;
                         }
                     }
-                    if (f5) {
-                        #pragma omp task
-                        {
-                            double t_ini = omp_get_wtime();
-                            char out_path[512];
-                            snprintf(out_path, sizeof(out_path), "%s/%s_DG.bmp", ruta_salida, nombre_base);
-                            desenfoque(out_path, header, offset, pixels, ancho, alto, k_gris);
-                            double t_fin = omp_get_wtime();
+                }
+                if (f5) {
+                    #pragma omp task
+                    {
+                        double t_ini = omp_get_wtime();
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_DG.bmp", ruta_salida, nombre_base);
+                        desenfoque(out_path, header, offset, pixels, ancho, alto, k_gris);
+                        double t_fin = omp_get_wtime();
 
-                            #pragma omp critical
-                            {
-                                strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
-                                strcpy(detalles[num_detalles].transformacion, "desenfoque_gris");
-                                detalles[num_detalles].pixeles = pixeles_imagen;
-                                detalles[num_detalles].tiempo = t_fin - t_ini;
-                                strcpy(detalles[num_detalles].archivo_salida, out_path);
-                                pixeles_totales += pixeles_imagen;
-                                num_detalles++;
-                            }
+                        #pragma omp critical
+                        {
+                            strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
+                            strcpy(detalles[num_detalles].transformacion, "desenfoque_gris");
+                            detalles[num_detalles].pixeles = pixeles_imagen;
+                            detalles[num_detalles].tiempo = t_fin - t_ini;
+                            strcpy(detalles[num_detalles].archivo_salida, out_path);
+                            pixeles_totales += pixeles_imagen;
+                            num_detalles++;
                         }
                     }
-                    if (f6) {
-                        #pragma omp task
-                        {
-                            double t_ini = omp_get_wtime();
-                            char out_path[512];
-                            snprintf(out_path, sizeof(out_path), "%s/%s_DC.bmp", ruta_salida, nombre_base);
-                            desenfoque_color(out_path, header, offset, pixels, ancho, alto, k_color);
-                            double t_fin = omp_get_wtime();
+                }
+                if (f6) {
+                    #pragma omp task
+                    {
+                        double t_ini = omp_get_wtime();
+                        char out_path[512];
+                        snprintf(out_path, sizeof(out_path), "%s/%s_DC.bmp", ruta_salida, nombre_base);
+                        desenfoque_color(out_path, header, offset, pixels, ancho, alto, k_color);
+                        double t_fin = omp_get_wtime();
 
-                            #pragma omp critical
-                            {
-                                strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
-                                strcpy(detalles[num_detalles].transformacion, "desenfoque_color");
-                                detalles[num_detalles].pixeles = pixeles_imagen;
-                                detalles[num_detalles].tiempo = t_fin - t_ini;
-                                strcpy(detalles[num_detalles].archivo_salida, out_path);
-                                pixeles_totales += pixeles_imagen;
-                                num_detalles++;
-                            }
+                        #pragma omp critical
+                        {
+                            strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
+                            strcpy(detalles[num_detalles].transformacion, "desenfoque_color");
+                            detalles[num_detalles].pixeles = pixeles_imagen;
+                            detalles[num_detalles].tiempo = t_fin - t_ini;
+                            strcpy(detalles[num_detalles].archivo_salida, out_path);
+                            pixeles_totales += pixeles_imagen;
+                            num_detalles++;
                         }
                     }
                 }
             }
-            free(header);
-            free(pixels);
         }
+        free(header);
+        free(pixels);
     }
 
-    // Esperar a que todos terminen para las métricas finales
+    // Esperar a que todos terminen
     MPI_Barrier(MPI_COMM_WORLD);
     
+    // Cálculo de métricas globales del rango
     double tiempo_final = MPI_Wtime();
     double tiempo_efectivo = tiempo_final - tiempo_inicio;
     double pixeles_por_segundo = (tiempo_efectivo > 0) ? ((double)pixeles_totales / tiempo_efectivo) : 0;
 
-    // Solo los trabajadores (Rank > 0) que procesaron algo escriben un archivo LOG
-    if (my_rank > 0 && num_detalles > 0) {
-        char log_filename[256];
-        snprintf(log_filename, sizeof(log_filename), "%s/rank_%d.log", ruta_salida, my_rank);
+    // ====================================================================
+    // ESCRITURA DEL ARCHIVO LOG
+    // ====================================================================
+    char log_filename[256];
+    snprintf(log_filename, sizeof(log_filename), "%s/rank_%d.log", ruta_salida, my_rank);
+    
+    FILE *log_file = fopen(log_filename, "w");
+    if (log_file != NULL) {
+        fprintf(log_file, "====== MPI RANK %d | HOST: %s ======\n", my_rank, processor_name);
+        fprintf(log_file, "Procesos MPI totales:   %d\n", num_procs);
+        fprintf(log_file, "Threads OpenMP:         %d\n", omp_get_max_threads());
+        fprintf(log_file, "Tareas ejecutadas:      %d\n", num_detalles);
+        fprintf(log_file, "Pixeles procesados:     %lld\n", pixeles_totales);
+        fprintf(log_file, "Tiempo efectivo:        %f s\n", tiempo_efectivo);
+        fprintf(log_file, "Pixeles/segundo:        %.3e\n\n", pixeles_por_segundo); // Formato Científico
         
-        FILE *log_file = fopen(log_filename, "w");
-        if (log_file != NULL) {
-            fprintf(log_file, "====== MPI RANK %d | HOST: %s ======\n", my_rank, processor_name);
-            fprintf(log_file, "Procesos MPI totales:   %d\n", num_procs);
-            fprintf(log_file, "Threads OpenMP:         %d\n", omp_get_max_threads());
-            fprintf(log_file, "Tareas ejecutadas:      %d\n", num_detalles);
-            fprintf(log_file, "Pixeles procesados:     %lld\n", pixeles_totales);
-            fprintf(log_file, "Tiempo efectivo:        %f s\n", tiempo_efectivo);
-            fprintf(log_file, "Pixeles/segundo:        %.3e\n\n", pixeles_por_segundo); 
-            
-            fprintf(log_file, "--- Detalle por imagen ---\n");
-            fprintf(log_file, "%-15s %-20s %-15s %-10s %s\n", "Imagen", "Transform.", "Pixeles", "Tiempo(s)", "Archivo salida");
-            fprintf(log_file, "------------------------------------------------------------------------------------------------\n");
-            
-            for(int k = 0; k < num_detalles; k++) {
-                char *nombre_archivo = strrchr(detalles[k].archivo_salida, '/');
-                nombre_archivo = (nombre_archivo != NULL) ? nombre_archivo + 1 : detalles[k].archivo_salida;
+        fprintf(log_file, "--- Detalle por imagen ---\n");
+        fprintf(log_file, "%-15s %-20s %-15s %-10s %s\n", "Imagen", "Transform.", "Pixeles", "Tiempo(s)", "Archivo salida");
+        fprintf(log_file, "------------------------------------------------------------------------------------------------\n");
+        
+        for(int k = 0; k < num_detalles; k++) {
+            // Extraer solo el nombre del archivo final para la tabla
+            char *nombre_archivo = strrchr(detalles[k].archivo_salida, '/');
+            nombre_archivo = (nombre_archivo != NULL) ? nombre_archivo + 1 : detalles[k].archivo_salida;
 
-                fprintf(log_file, "%-15.15s %-20s %-15lld %-10.4f %s\n",
-                        detalles[k].nombre_img,
-                        detalles[k].transformacion,
-                        detalles[k].pixeles,
-                        detalles[k].tiempo,
-                        nombre_archivo);
-            }
-            fclose(log_file);
+            fprintf(log_file, "%-15.15s %-20s %-15lld %-10.4f %s\n",
+                    detalles[k].nombre_img,
+                    detalles[k].transformacion,
+                    detalles[k].pixeles,
+                    detalles[k].tiempo,
+                    nombre_archivo);
         }
+        fclose(log_file);
     }
+    // ====================================================================
 
-    // El Jefe (Rank 0) imprime el tiempo total para que la Interfaz de Python lo capture
+    // Solo el Master imprime la salida final para la GUI de Python
     if (my_rank == 0) {
         printf("TIEMPO_TOTAL:%.4f\n", tiempo_efectivo);
     }

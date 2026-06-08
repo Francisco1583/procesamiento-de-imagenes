@@ -14,7 +14,7 @@ class DropZone(QLabel):
     def __init__(self):
         super().__init__()
         self.archivos = []
-        self.setText("Arrastra imágenes\nmáximo 150\n.bmp\n\n(O haz clic para seleccionar)")
+        self.setText("Arrastra imágenes\nmáximo 10\n.bmp\n\n(O haz clic para seleccionar)")
         self.setAlignment(Qt.AlignCenter)
         self.setStyleSheet("""
             QLabel {
@@ -39,10 +39,10 @@ class DropZone(QLabel):
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if path.lower().endswith('.bmp'):
-                if len(self.archivos) < 600 and path not in self.archivos:
+                if len(self.archivos) < 10 and path not in self.archivos:
                     self.archivos.append(path)
-                elif len(self.archivos) >= 600:
-                    QMessageBox.warning(self, "Límite", "Solo puedes procesar hasta 600 imágenes a la vez.")
+                elif len(self.archivos) >= 10:
+                    QMessageBox.warning(self, "Límite", "Solo puedes procesar hasta 10 imágenes a la vez.")
                     break
         self.actualizar_texto()
 
@@ -282,7 +282,7 @@ class AppProcesamiento(QWidget):
         ruta_hosts = os.path.join(self.directorio_base, "hosts_mpi")
         
         comando = [
-            "mpirun", "--hostfile", ruta_hosts, "-np", "4", 
+            "mpirun", "-f", ruta_hosts, "-np", "6", 
             ruta_ejecutable, self.ruta_salida, 
             k_gris, k_color, f1, f2, f3, f4, f5, f6
         ] + archivos
