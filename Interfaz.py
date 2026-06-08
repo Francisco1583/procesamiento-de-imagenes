@@ -14,7 +14,7 @@ class DropZone(QLabel):
     def __init__(self):
         super().__init__()
         self.archivos = []
-        self.setText("Arrastra imágenes\nmáximo 10\n.bmp\n\n(O haz clic para seleccionar)")
+        self.setText("Arrastra imágenes\nmáximo 150\n.bmp\n\n(O haz clic para seleccionar)")
         self.setAlignment(Qt.AlignCenter)
         self.setStyleSheet("""
             QLabel {
@@ -282,7 +282,7 @@ class AppProcesamiento(QWidget):
         ruta_hosts = os.path.join(self.directorio_base, "hosts_mpi")
         
         comando = [
-            "mpirun", "-f", ruta_hosts, "-np", "4", 
+            "mpirun", "--hostfile", ruta_hosts, "-np", "4", 
             ruta_ejecutable, self.ruta_salida, 
             k_gris, k_color, f1, f2, f3, f4, f5, f6
         ] + archivos

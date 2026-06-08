@@ -1,3 +1,3 @@
-master:2
-esclavoFisico1:1
-esclavoFisico2:1
+master slots=2
+esclavofisico1 slots=1
+esclavofisico2 slots=1
