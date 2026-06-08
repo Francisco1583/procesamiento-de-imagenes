@@ -6,6 +6,7 @@
 #include "selec_proc_1.h"
 #include <mpi.h>
 
+#define NUM_THREADS 18
 #define MAX_IMGS 150
 
 // Función auxiliar para leer la imagen en RAM una sola vez con validaciones
@@ -69,6 +70,8 @@ int main(int argc, char *argv[]) {
 
     int num_imgs = argc - 10;
     if (num_imgs > MAX_IMGS) num_imgs = MAX_IMGS;
+
+    omp_set_num_threads(NUM_THREADS);
 
     // Variables maestras para el registro de logs
     LogDetail detalles[MAX_IMGS * 6]; // Capacidad para 6 transformaciones por imagen
