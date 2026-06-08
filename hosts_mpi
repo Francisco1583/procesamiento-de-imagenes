@@ -1,2 +1,2 @@
-master:1
-esclavo1:1
+master slots=1
+esclavo1 slots=1
