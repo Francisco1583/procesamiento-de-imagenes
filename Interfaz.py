@@ -39,7 +39,7 @@ class DropZone(QLabel):
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if path.lower().endswith('.bmp'):
-                if len(self.archivos) < 10 and path not in self.archivos:
+                if len(self.archivos) < 150 and path not in self.archivos:
                     self.archivos.append(path)
                 elif len(self.archivos) >= 150:
                     QMessageBox.warning(self, "Límite", "Solo puedes procesar hasta 150 imágenes a la vez.")
@@ -51,7 +51,7 @@ class DropZone(QLabel):
             self, "Seleccionar Imágenes BMP", "", "Imágenes BMP (*.bmp)")
         
         for path in archivos_seleccionados:
-            if len(self.archivos) < 10 and path not in self.archivos:
+            if len(self.archivos) < 150 and path not in self.archivos:
                 self.archivos.append(path)
         self.actualizar_texto()
 
