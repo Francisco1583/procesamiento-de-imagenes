@@ -128,8 +128,8 @@ int main(int argc, char *argv[]) {
 
                         #pragma omp critical
                         {
-                            // Cola secuencial de red: mueve el archivo ya creado al NFS
-                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            // AQUI ESTA LA CORRECCIÓN DE LAS COMILLAS
+                            snprintf(cmd, sizeof(cmd), "mv \"%s\" \"%s\"", temp_path, out_path);
                             system(cmd);
 
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -155,7 +155,7 @@ int main(int argc, char *argv[]) {
 
                         #pragma omp critical
                         {
-                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            snprintf(cmd, sizeof(cmd), "mv \"%s\" \"%s\"", temp_path, out_path);
                             system(cmd);
 
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -181,7 +181,7 @@ int main(int argc, char *argv[]) {
 
                         #pragma omp critical
                         {
-                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            snprintf(cmd, sizeof(cmd), "mv \"%s\" \"%s\"", temp_path, out_path);
                             system(cmd);
 
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
 
                         #pragma omp critical
                         {
-                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            snprintf(cmd, sizeof(cmd), "mv \"%s\" \"%s\"", temp_path, out_path);
                             system(cmd);
 
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -233,7 +233,7 @@ int main(int argc, char *argv[]) {
 
                         #pragma omp critical
                         {
-                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            snprintf(cmd, sizeof(cmd), "mv \"%s\" \"%s\"", temp_path, out_path);
                             system(cmd);
 
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -259,7 +259,7 @@ int main(int argc, char *argv[]) {
 
                         #pragma omp critical
                         {
-                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            snprintf(cmd, sizeof(cmd), "mv \"%s\" \"%s\"", temp_path, out_path);
                             system(cmd);
 
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
