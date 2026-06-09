@@ -64,8 +64,8 @@ int main(int argc, char *argv[]) {
     int num_imgs = argc - 10;
     if (num_imgs > MAX_IMGS) num_imgs = MAX_IMGS;
 
-    // Configuración para cargas anchas (np=10). Evita el Thread Thrashing.
-    omp_set_num_threads(2);
+    // Configuración para cargas anchas. Evita el Thread Thrashing.
+    omp_set_num_threads(1);
 
     LogDetail detalles[MAX_IMGS * 6]; 
     int num_detalles = 0;

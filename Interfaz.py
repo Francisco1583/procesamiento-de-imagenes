@@ -315,7 +315,7 @@ class AppProcesamiento(QWidget):
             ] + archivos
         else:
             comando = [
-                "mpirun", "-host", "localhost", "-np", "4", 
+                "mpirun", "-host", "localhost", "-np", "13", 
                 ruta_ejecutable, self.ruta_salida, 
                 k_gris, k_color, *f_flags
             ] + archivos
