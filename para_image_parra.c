@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
     int num_imgs = argc - 10;
     if (num_imgs > MAX_IMGS) num_imgs = MAX_IMGS;
 
-    // OPTIMIZACIÓN CRÍTICA: Solo 6 tareas = Solo 6 hilos. Cero cuello de botella.
+    // Solo 6 tareas = Solo 6 hilos. Cero cuello de botella.
     omp_set_num_threads(6);
 
     LogDetail detalles[MAX_IMGS * 6]; 
@@ -92,6 +92,7 @@ int main(int argc, char *argv[]) {
         char *punto = strrchr(nombre_base, '.');
         if (punto != NULL) *punto = '\0';
 
+        // Log que atrapa la UI de Python para el progreso
         printf("[Rank %d en %s] Procesando la imagen: %s\n", my_rank, processor_name, nombre_base);
         fflush(stdout);
 
@@ -112,6 +113,9 @@ int main(int argc, char *argv[]) {
                         
                         gray_img(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
+
+                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
+                        system(cmd);
 
                         #pragma omp critical
                         {
@@ -136,6 +140,9 @@ int main(int argc, char *argv[]) {
                         inv_img_color(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
 
+                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
+                        system(cmd);
+
                         #pragma omp critical
                         {
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -158,6 +165,9 @@ int main(int argc, char *argv[]) {
                         
                         inv_img_grey_horizontal(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
+
+                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
+                        system(cmd);
 
                         #pragma omp critical
                         {
@@ -182,6 +192,9 @@ int main(int argc, char *argv[]) {
                         inv_img_color_horizontal(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
 
+                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
+                        system(cmd);
+
                         #pragma omp critical
                         {
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -204,6 +217,9 @@ int main(int argc, char *argv[]) {
                         
                         desenfoque(temp_path, header, offset, pixels, ancho, alto, k_gris);
                         double t_fin = omp_get_wtime();
+
+                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
+                        system(cmd);
 
                         #pragma omp critical
                         {
@@ -228,6 +244,9 @@ int main(int argc, char *argv[]) {
                         desenfoque_color(temp_path, header, offset, pixels, ancho, alto, k_color);
                         double t_fin = omp_get_wtime();
 
+                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
+                        system(cmd);
+
                         #pragma omp critical
                         {
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -246,12 +265,11 @@ int main(int argc, char *argv[]) {
         free(pixels);
     }
 
-    // =========================================================
-    // OPTIMIZACIÓN: TRANSFERENCIA EN BLOQUE (BULK TRANSFER)
-    // El CPU ya terminó todo el cálculo rápido. Ahora enviamos por red de un solo golpe.
-    // =========================================================
+    // AVISO A PYTHON: El CPU terminó, ahora entra la red.
+    printf("[Rank %d en %s] CPU Finalizado. Sincronizando por NFS...\n", my_rank, processor_name);
+    fflush(stdout);
+
     char bulk_cmd[1024];
-    // Movemos todos los archivos generados por este nodo específico hacia el NFS
     snprintf(bulk_cmd, sizeof(bulk_cmd), "mv /tmp/*_%d.bmp '%s/' 2>/dev/null", my_rank, ruta_salida);
     system(bulk_cmd);
 

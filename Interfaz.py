@@ -282,7 +282,7 @@ class AppProcesamiento(QWidget):
         
         # Ajustado a -np 6 como me solicitaste
         comando = [
-            "mpirun", "-f", ruta_hosts, "-np", "6", 
+            "mpirun", "-f", ruta_hosts, "-np", "9", 
             ruta_ejecutable, self.ruta_salida, 
             k_gris, k_color, f1, f2, f3, f4, f5, f6
         ] + archivos
@@ -301,6 +301,9 @@ class AppProcesamiento(QWidget):
                 if linea:
                     self.consola.append(linea.strip())
                     
+                    if "Sincronizando por NFS" in linea:
+                        self.txt_tiempo.setText("Enviando por red...")
+                        
                     # Si MPI escupe un error crítico, lo sabremos sin congelarnos
                     if "error" in linea.lower() or "failed" in linea.lower():
                         hubo_error = True
