@@ -113,10 +113,6 @@ int main(int argc, char *argv[]) {
                         gray_img(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
 
-                        // OPTIMIZACIÓN: Mover archivo FUERA de la región crítica y con COMILLAS SIMPLES
-                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
-                        system(cmd);
-
                         #pragma omp critical
                         {
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -139,9 +135,6 @@ int main(int argc, char *argv[]) {
                         
                         inv_img_color(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
-
-                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
-                        system(cmd);
 
                         #pragma omp critical
                         {
@@ -166,9 +159,6 @@ int main(int argc, char *argv[]) {
                         inv_img_grey_horizontal(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
 
-                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
-                        system(cmd);
-
                         #pragma omp critical
                         {
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -191,9 +181,6 @@ int main(int argc, char *argv[]) {
                         
                         inv_img_color_horizontal(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
-
-                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
-                        system(cmd);
 
                         #pragma omp critical
                         {
@@ -218,9 +205,6 @@ int main(int argc, char *argv[]) {
                         desenfoque(temp_path, header, offset, pixels, ancho, alto, k_gris);
                         double t_fin = omp_get_wtime();
 
-                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
-                        system(cmd);
-
                         #pragma omp critical
                         {
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -244,9 +228,6 @@ int main(int argc, char *argv[]) {
                         desenfoque_color(temp_path, header, offset, pixels, ancho, alto, k_color);
                         double t_fin = omp_get_wtime();
 
-                        snprintf(cmd, sizeof(cmd), "mv '%s' '%s'", temp_path, out_path);
-                        system(cmd);
-
                         #pragma omp critical
                         {
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
@@ -264,6 +245,15 @@ int main(int argc, char *argv[]) {
         free(header);
         free(pixels);
     }
+
+    // =========================================================
+    // OPTIMIZACIÓN: TRANSFERENCIA EN BLOQUE (BULK TRANSFER)
+    // El CPU ya terminó todo el cálculo rápido. Ahora enviamos por red de un solo golpe.
+    // =========================================================
+    char bulk_cmd[1024];
+    // Movemos todos los archivos generados por este nodo específico hacia el NFS
+    snprintf(bulk_cmd, sizeof(bulk_cmd), "mv /tmp/*_%d.bmp '%s/' 2>/dev/null", my_rank, ruta_salida);
+    system(bulk_cmd);
 
     MPI_Barrier(MPI_COMM_WORLD);
     
