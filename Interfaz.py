@@ -270,7 +270,6 @@ class AppProcesamiento(QWidget):
             QMessageBox.warning(self, "Atención", "Selecciona al menos una transformación.")
             return
 
-        # Calcular tareas para la barra de progreso
         total_tareas = len(archivos)
         tareas_completadas = 0
         self.barra_progreso.setValue(0)
@@ -281,19 +280,20 @@ class AppProcesamiento(QWidget):
         ruta_ejecutable = os.path.join(self.directorio_base, "main_mpi")
         ruta_hosts = os.path.join(self.directorio_base, "hosts_mpi")
         
+        # Ajustado a -np 6 como me solicitaste
         comando = [
-            "mpirun", "-f", ruta_hosts, "-np", "4", 
+            "mpirun", "-f", ruta_hosts, "-np", "6", 
             ruta_ejecutable, self.ruta_salida, 
             k_gris, k_color, f1, f2, f3, f4, f5, f6
         ] + archivos
         
         try:
-            # Ejecución asíncrona para actualizar la barra y la consola en tiempo real
-            proceso = subprocess.Popen(comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            # EL PARCHE VITAL: stderr=subprocess.STDOUT fusiona los canales para evitar el Deadlock de RAM
+            proceso = subprocess.Popen(comando, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             
             tiempo_total = "Desconocido"
+            hubo_error = False
             
-            # Leer la salida línea por línea mientras se ejecuta
             while True:
                 linea = proceso.stdout.readline()
                 if not linea and proceso.poll() is not None:
@@ -301,7 +301,10 @@ class AppProcesamiento(QWidget):
                 if linea:
                     self.consola.append(linea.strip())
                     
-                    # Detectar avance de tareas
+                    # Si MPI escupe un error crítico, lo sabremos sin congelarnos
+                    if "error" in linea.lower() or "failed" in linea.lower():
+                        hubo_error = True
+
                     if "Procesando la imagen" in linea:
                         tareas_completadas += 1
                         porcentaje = int((tareas_completadas / total_tareas) * 100)
@@ -310,14 +313,10 @@ class AppProcesamiento(QWidget):
                     if "TIEMPO_TOTAL:" in linea:
                         tiempo_total = linea.split(":")[1].strip() + " segundos"
                         
-                    QApplication.processEvents() # Previene que la ventana se congele
+                    QApplication.processEvents()
 
-            errores = proceso.stderr.read()
-            if errores:
-                self.consola.append("\n[ERRORES DEL SISTEMA]:\n" + errores)
-            
-            if proceso.returncode != 0:
-                QMessageBox.critical(self, "Error del Sistema", "El programa en C falló. Revisa el monitor del clúster.")
+            if proceso.returncode != 0 or hubo_error:
+                QMessageBox.critical(self, "Error del Sistema", "El programa o la red falló. Revisa el monitor del clúster.")
                 self.txt_tiempo.setText("Error")
                 return
 
@@ -326,7 +325,7 @@ class AppProcesamiento(QWidget):
             
         except FileNotFoundError:
             QMessageBox.critical(self, "Ejecutable no encontrado", 
-                                 f"No se encontró el archivo compilado en:\n{ruta_ejecutable}\n\nAsegúrate de compilar el código en C en esa carpeta.")
+                                 f"No se encontró el archivo en:\n{ruta_ejecutable}")
             self.txt_tiempo.setText("Error")
 
 if __name__ == '__main__':

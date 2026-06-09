@@ -107,11 +107,9 @@ int main(int argc, char *argv[]) {
         printf("[Rank %d en %s] Procesando la imagen: %s\n", my_rank, processor_name, nombre_base);
         fflush(stdout);
 
-        // Carga en RAM
         cargar_imagen(ruta_completa, &header, &offset, &pixels, &ancho, &alto);
         long long pixeles_imagen = (long long)ancho * alto;
 
-        // Procesamiento local con OpenMP
         #pragma omp parallel
         {
             #pragma omp single
@@ -120,14 +118,20 @@ int main(int argc, char *argv[]) {
                     #pragma omp task
                     {
                         double t_ini = omp_get_wtime();
-                        char out_path[512];
+                        char temp_path[512], out_path[512], cmd[1024];
+                        snprintf(temp_path, sizeof(temp_path), "/tmp/%s_VG_%d.bmp", nombre_base, my_rank);
                         snprintf(out_path, sizeof(out_path), "%s/%s_VG.bmp", ruta_salida, nombre_base);
-                        gray_img(out_path, header, offset, pixels, ancho, alto);
+                        
+                        // Escribe a velocidad de RAM/Disco local sin tocar la red
+                        gray_img(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
 
-                        // Guardar datos de manera segura mediante región crítica
                         #pragma omp critical
                         {
+                            // Cola secuencial de red: mueve el archivo ya creado al NFS
+                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            system(cmd);
+
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
                             strcpy(detalles[num_detalles].transformacion, "gris_vertical");
                             detalles[num_detalles].pixeles = pixeles_imagen;
@@ -142,13 +146,18 @@ int main(int argc, char *argv[]) {
                     #pragma omp task
                     {
                         double t_ini = omp_get_wtime();
-                        char out_path[512];
+                        char temp_path[512], out_path[512], cmd[1024];
+                        snprintf(temp_path, sizeof(temp_path), "/tmp/%s_VC_%d.bmp", nombre_base, my_rank);
                         snprintf(out_path, sizeof(out_path), "%s/%s_VC.bmp", ruta_salida, nombre_base);
-                        inv_img_color(out_path, header, offset, pixels, ancho, alto);
+                        
+                        inv_img_color(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
 
                         #pragma omp critical
                         {
+                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            system(cmd);
+
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
                             strcpy(detalles[num_detalles].transformacion, "color_vertical");
                             detalles[num_detalles].pixeles = pixeles_imagen;
@@ -163,13 +172,18 @@ int main(int argc, char *argv[]) {
                     #pragma omp task
                     {
                         double t_ini = omp_get_wtime();
-                        char out_path[512];
+                        char temp_path[512], out_path[512], cmd[1024];
+                        snprintf(temp_path, sizeof(temp_path), "/tmp/%s_HG_%d.bmp", nombre_base, my_rank);
                         snprintf(out_path, sizeof(out_path), "%s/%s_HG.bmp", ruta_salida, nombre_base);
-                        inv_img_grey_horizontal(out_path, header, offset, pixels, ancho, alto);
+                        
+                        inv_img_grey_horizontal(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
 
                         #pragma omp critical
                         {
+                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            system(cmd);
+
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
                             strcpy(detalles[num_detalles].transformacion, "gris_horizontal");
                             detalles[num_detalles].pixeles = pixeles_imagen;
@@ -184,13 +198,18 @@ int main(int argc, char *argv[]) {
                     #pragma omp task
                     {
                         double t_ini = omp_get_wtime();
-                        char out_path[512];
+                        char temp_path[512], out_path[512], cmd[1024];
+                        snprintf(temp_path, sizeof(temp_path), "/tmp/%s_HC_%d.bmp", nombre_base, my_rank);
                         snprintf(out_path, sizeof(out_path), "%s/%s_HC.bmp", ruta_salida, nombre_base);
-                        inv_img_color_horizontal(out_path, header, offset, pixels, ancho, alto);
+                        
+                        inv_img_color_horizontal(temp_path, header, offset, pixels, ancho, alto);
                         double t_fin = omp_get_wtime();
 
                         #pragma omp critical
                         {
+                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            system(cmd);
+
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
                             strcpy(detalles[num_detalles].transformacion, "color_horizontal");
                             detalles[num_detalles].pixeles = pixeles_imagen;
@@ -205,13 +224,18 @@ int main(int argc, char *argv[]) {
                     #pragma omp task
                     {
                         double t_ini = omp_get_wtime();
-                        char out_path[512];
+                        char temp_path[512], out_path[512], cmd[1024];
+                        snprintf(temp_path, sizeof(temp_path), "/tmp/%s_DG_%d.bmp", nombre_base, my_rank);
                         snprintf(out_path, sizeof(out_path), "%s/%s_DG.bmp", ruta_salida, nombre_base);
-                        desenfoque(out_path, header, offset, pixels, ancho, alto, k_gris);
+                        
+                        desenfoque(temp_path, header, offset, pixels, ancho, alto, k_gris);
                         double t_fin = omp_get_wtime();
 
                         #pragma omp critical
                         {
+                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            system(cmd);
+
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
                             strcpy(detalles[num_detalles].transformacion, "desenfoque_gris");
                             detalles[num_detalles].pixeles = pixeles_imagen;
@@ -226,13 +250,18 @@ int main(int argc, char *argv[]) {
                     #pragma omp task
                     {
                         double t_ini = omp_get_wtime();
-                        char out_path[512];
+                        char temp_path[512], out_path[512], cmd[1024];
+                        snprintf(temp_path, sizeof(temp_path), "/tmp/%s_DC_%d.bmp", nombre_base, my_rank);
                         snprintf(out_path, sizeof(out_path), "%s/%s_DC.bmp", ruta_salida, nombre_base);
-                        desenfoque_color(out_path, header, offset, pixels, ancho, alto, k_color);
+                        
+                        desenfoque_color(temp_path, header, offset, pixels, ancho, alto, k_color);
                         double t_fin = omp_get_wtime();
 
                         #pragma omp critical
                         {
+                            snprintf(cmd, sizeof(cmd), "mv %s %s", temp_path, out_path);
+                            system(cmd);
+
                             strncpy(detalles[num_detalles].nombre_img, nombre_base, 127);
                             strcpy(detalles[num_detalles].transformacion, "desenfoque_color");
                             detalles[num_detalles].pixeles = pixeles_imagen;
