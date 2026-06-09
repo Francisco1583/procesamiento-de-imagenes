@@ -6,7 +6,6 @@
 #include "selec_proc_1.h"
 #include <mpi.h>
 
-#define NUM_THREADS 18
 #define MAX_IMGS 150
 
 void cargar_imagen(const char* path, unsigned char** header, int* offset, unsigned char** pixels, int* ancho, int* alto) {
@@ -65,7 +64,8 @@ int main(int argc, char *argv[]) {
     int num_imgs = argc - 10;
     if (num_imgs > MAX_IMGS) num_imgs = MAX_IMGS;
 
-    omp_set_num_threads(NUM_THREADS);
+    // OPTIMIZACIÓN CRÍTICA: Solo 6 tareas = Solo 6 hilos. Cero cuello de botella.
+    omp_set_num_threads(6);
 
     LogDetail detalles[MAX_IMGS * 6]; 
     int num_detalles = 0;
