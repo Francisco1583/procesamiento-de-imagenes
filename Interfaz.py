@@ -250,6 +250,22 @@ class AppProcesamiento(QWidget):
         dlg.setStyleSheet("QLabel { color: white; } QPushButton { background-color: #ddd; color: #000; }")
         dlg.exec_()
 
+    def obtener_archivos_faltantes(self, archivos, f_flags):
+        sufijos = ["_VG.bmp", "_VC.bmp", "_HG.bmp", "_HC.bmp", "_DG.bmp", "_DC.bmp"]
+        pendientes = []
+        for img in archivos:
+            nombre_base = os.path.splitext(os.path.basename(img))[0]
+            completado = True
+            for i, f in enumerate(f_flags):
+                if f == "1":
+                    ruta_esperada = os.path.join(self.ruta_salida, nombre_base + sufijos[i])
+                    if not os.path.exists(ruta_esperada):
+                        completado = False
+                        break
+            if not completado:
+                pendientes.append(img)
+        return pendientes
+
     def ejecutar_procesamiento(self):
         archivos = self.drop_zone.archivos
         if not archivos:
@@ -266,33 +282,48 @@ class AppProcesamiento(QWidget):
         f5 = "1" if self.chk5.isChecked() else "0"
         f6 = "1" if self.chk6.isChecked() else "0"
 
-        if all(f == "0" for f in [f1, f2, f3, f4, f5, f6]):
+        f_flags = [f1, f2, f3, f4, f5, f6]
+        if all(f == "0" for f in f_flags):
             QMessageBox.warning(self, "Atención", "Selecciona al menos una transformación.")
             return
 
-        total_tareas = len(archivos)
-        tareas_completadas = 0
-        self.barra_progreso.setValue(0)
-        self.txt_tiempo.setText("Procesando...")
-        self.consola.clear()
+        self.procesar_con_comando(archivos, k_gris, k_color, f_flags, es_fallback=False)
+
+    def procesar_con_comando(self, archivos, k_gris, k_color, f_flags, es_fallback=False):
+        # MATEMÁTICA DE LA BARRA HONESTA
+        # Total de pasos = (Nº Imágenes para CPU) + (Nº Archivos resultantes para Red)
+        num_transformaciones = sum(1 for f in f_flags if f == "1")
+        total_archivos_generados = len(archivos) * num_transformaciones
+        total_pasos = len(archivos) + total_archivos_generados
+        pasos_completados = 0
+        
+        if not es_fallback:
+            self.barra_progreso.setValue(0)
+            self.txt_tiempo.setText("Fase 1: Procesamiento CPU...")
+            self.consola.clear()
+        
         QApplication.processEvents()
 
         ruta_ejecutable = os.path.join(self.directorio_base, "main_mpi")
         ruta_hosts = os.path.join(self.directorio_base, "hosts_mpi")
         
-        # Ajustado a -np 6 como me solicitaste
-        comando = [
-            "mpirun", "-f", ruta_hosts, "-np", "9", 
-            ruta_ejecutable, self.ruta_salida, 
-            k_gris, k_color, f1, f2, f3, f4, f5, f6
-        ] + archivos
-        
+        if not es_fallback:
+            comando = [
+                "mpirun", "-f", ruta_hosts, "-np", "10", 
+                ruta_ejecutable, self.ruta_salida, 
+                k_gris, k_color, *f_flags
+            ] + archivos
+        else:
+            comando = [
+                "mpirun", "-host", "localhost", "-np", "4", 
+                ruta_ejecutable, self.ruta_salida, 
+                k_gris, k_color, *f_flags
+            ] + archivos
+
         try:
-            # EL PARCHE VITAL: stderr=subprocess.STDOUT fusiona los canales para evitar el Deadlock de RAM
             proceso = subprocess.Popen(comando, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            
             tiempo_total = "Desconocido"
-            hubo_error = False
+            hubo_error_critico = False
             
             while True:
                 linea = proceso.stdout.readline()
@@ -302,25 +333,46 @@ class AppProcesamiento(QWidget):
                     self.consola.append(linea.strip())
                     
                     if "Sincronizando por NFS" in linea:
-                        self.txt_tiempo.setText("Enviando por red...")
+                        self.txt_tiempo.setText("Fase 2: Enviando por red...")
                         
-                    # Si MPI escupe un error crítico, lo sabremos sin congelarnos
-                    if "error" in linea.lower() or "failed" in linea.lower():
-                        hubo_error = True
+                    if "error" in linea.lower() or "failed" in linea.lower() or "connection" in linea.lower():
+                        hubo_error_critico = True
 
+                    # Detectar avance de CPU
                     if "Procesando la imagen" in linea:
-                        tareas_completadas += 1
-                        porcentaje = int((tareas_completadas / total_tareas) * 100)
+                        pasos_completados += 1
+                        porcentaje = int((pasos_completados / total_pasos) * 100)
+                        self.barra_progreso.setValue(min(porcentaje, 100))
+                        
+                    # Detectar avance de Red (gracias al mv -v de Linux)
+                    if "renamed" in linea.lower() or "->" in linea:
+                        pasos_completados += 1
+                        porcentaje = int((pasos_completados / total_pasos) * 100)
                         self.barra_progreso.setValue(min(porcentaje, 100))
                     
                     if "TIEMPO_TOTAL:" in linea:
                         tiempo_total = linea.split(":")[1].strip() + " segundos"
+                        if es_fallback:
+                            tiempo_total += " (Tiempo Rescate)"
                         
-                    QApplication.processEvents()
+                    QApplication.processEvents() 
 
-            if proceso.returncode != 0 or hubo_error:
-                QMessageBox.critical(self, "Error del Sistema", "El programa o la red falló. Revisa el monitor del clúster.")
-                self.txt_tiempo.setText("Error")
+            if proceso.returncode != 0 or hubo_error_critico:
+                if not es_fallback:
+                    self.consola.append("\n⚠️ [ALERTA] Pérdida de nodo detectada. Iniciando protocolo de Tolerancia a Fallos...")
+                    QApplication.processEvents()
+                    
+                    archivos_faltantes = self.obtener_archivos_faltantes(archivos, f_flags)
+                    if archivos_faltantes:
+                        self.consola.append(f"↪ Rescatando {len(archivos_faltantes)} imágenes pendientes en entorno local seguro...")
+                        self.procesar_con_comando(archivos_faltantes, k_gris, k_color, f_flags, es_fallback=True)
+                    else:
+                        self.consola.append("✅ Todas las imágenes lograron procesarse antes de la caída.")
+                        self.txt_tiempo.setText(tiempo_total)
+                        self.barra_progreso.setValue(100)
+                else:
+                    QMessageBox.critical(self, "Error Fatal", "Incluso el nodo de rescate falló.")
+                    self.txt_tiempo.setText("Error")
                 return
 
             self.txt_tiempo.setText(tiempo_total)
@@ -328,7 +380,7 @@ class AppProcesamiento(QWidget):
             
         except FileNotFoundError:
             QMessageBox.critical(self, "Ejecutable no encontrado", 
-                                 f"No se encontró el archivo en:\n{ruta_ejecutable}")
+                                 f"No se encontró el archivo compilado en:\n{ruta_ejecutable}")
             self.txt_tiempo.setText("Error")
 
 if __name__ == '__main__':
