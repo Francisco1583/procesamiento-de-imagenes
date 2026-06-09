@@ -282,7 +282,7 @@ class AppProcesamiento(QWidget):
         
         # Ajustado a -np 6 como me solicitaste
         comando = [
-            "mpirun", "-f", ruta_hosts, "-np", "4", 
+            "mpirun", "-f", ruta_hosts, "-np", "6", 
             ruta_ejecutable, self.ruta_salida, 
             k_gris, k_color, f1, f2, f3, f4, f5, f6
         ] + archivos
